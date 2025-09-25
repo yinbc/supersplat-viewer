@@ -19,6 +19,7 @@ import { XrNavigation } from 'playcanvas/scripts/esm/xr-navigation.mjs';
 
 import { migrateSettings } from './data-migrations';
 import { observe } from './observe';
+import { Tooltip } from './tooltip';
 import { Viewer } from './viewer';
 
 
@@ -281,12 +282,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         'buttonContainer',
         'play', 'pause',
         'settings', 'settingsPanel',
-        'orbitSettings', 'flySettings',
-        'fly', 'orbit', 'cameraToggleHighlight',
-        'high', 'low', 'qualityToggleHighlight',
+        'orbitCamera', 'flyCamera',
+        'hqCheck', 'hqOption', 'lqCheck', 'lqOption',
         'reset', 'frame',
         'loadingText', 'loadingBar',
-        'joystickBase', 'joystick'
+        'joystickBase', 'joystick',
+        'tooltip'
     ].reduce((acc: Record<string, HTMLElement>, id) => {
         acc[id] = document.getElementById(id);
         return acc;
@@ -354,15 +355,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // HQ mode
-    dom.high.addEventListener('click', () => {
+    dom.hqOption.addEventListener('click', () => {
         state.hqMode = true;
     });
-    dom.low.addEventListener('click', () => {
+    dom.lqOption.addEventListener('click', () => {
         state.hqMode = false;
     });
 
     const updateHQ = () => {
-        dom.qualityToggleHighlight.classList[state.hqMode ? 'add' : 'remove']('right');
+        dom.hqCheck.classList[state.hqMode ? 'add' : 'remove']('active');
+        dom.lqCheck.classList[state.hqMode ? 'remove' : 'add']('active');
     };
     events.on('hqMode:changed', (value) => {
         updateHQ();
@@ -405,7 +407,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         updateInfoTab('touch');
     });
 
-    dom.info.addEventListener('pointerup', () => {
+    dom.info.addEventListener('click', () => {
         updateInfoTab(state.inputMode);
         dom.infoPanel.classList.toggle('hidden');
     });
@@ -504,6 +506,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const rect = dom.timelineContainer.getBoundingClientRect();
             const t = Math.max(0, Math.min(rect.width - 1, event.clientX - rect.left)) / rect.width;
             events.fire('setAnimationTime', state.animationDuration * t);
+            showUI();
         };
 
         let paused = false;
@@ -538,30 +541,20 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Camera mode UI
     events.on('cameraMode:changed', () => {
-        if (state.cameraMode === 'fly') {
-            dom.cameraToggleHighlight.classList.add('right');
-        } else {
-            dom.cameraToggleHighlight.classList.remove('right');
-        }
-
-        dom.orbitSettings.classList[state.cameraMode === 'orbit' ? 'remove' : 'add']('hidden');
-        dom.flySettings.classList[state.cameraMode === 'fly' ? 'remove' : 'add']('hidden');
+        dom.orbitCamera.classList[state.cameraMode === 'orbit' ? 'add' : 'remove']('active');
+        dom.flyCamera.classList[state.cameraMode === 'fly' ? 'add' : 'remove']('active');
     });
 
-    dom.orbitSettings.addEventListener('click', () => {
+    dom.settings.addEventListener('click', () => {
         dom.settingsPanel.classList.toggle('hidden');
     });
 
-    dom.flySettings.addEventListener('click', () => {
-        dom.settingsPanel.classList.toggle('hidden');
-    });
-
-    dom.fly.addEventListener('click', () => {
-        state.cameraMode = 'fly';
-    });
-
-    dom.orbit.addEventListener('click', () => {
+    dom.orbitCamera.addEventListener('click', () => {
         state.cameraMode = 'orbit';
+    });
+
+    dom.flyCamera.addEventListener('click', () => {
+        state.cameraMode = 'fly';
     });
 
     dom.reset.addEventListener('click', (event) => {
@@ -649,4 +642,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         }
     });
+
+    // tooltips
+    const tooltip = new Tooltip(dom.tooltip);
+
+    tooltip.register(dom.play, 'Play Animation', 'right');
+    tooltip.register(dom.pause, 'Pause Animation', 'right');
+    tooltip.register(dom.orbitCamera, 'Orbit Camera', 'top');
+    tooltip.register(dom.flyCamera, 'Fly Camera', 'top');
+    tooltip.register(dom.reset, 'Reset Camera', 'bottom');
+    tooltip.register(dom.frame, 'Frame Model', 'bottom');
+    tooltip.register(dom.settings, 'Show Settings', 'top');
+    tooltip.register(dom.info, 'Show Info', 'top');
+    tooltip.register(dom.arMode, 'Enter AR Mode', 'top');
+    tooltip.register(dom.vrMode, 'Enter VR Mode', 'top');
+    tooltip.register(dom.enterFullscreen, 'Enter Fullscreen', 'top');
+    tooltip.register(dom.exitFullscreen, 'Exit Fullscreen', 'top');
 });
