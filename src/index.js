@@ -127,29 +127,90 @@ const initXr = (app, cameraElement, state, events) => {
 };
 
 const loadContent = (app) => {
-    const { contentUrl, contents } = window.sse;
+    const { contentEntries, contentUrl, contents } = window.sse;
+    const entries = (contentEntries && contentEntries.length > 0) ? contentEntries : [{ url: contentUrl, contents }];
 
-    const filename = new URL(contentUrl, location.href).pathname.split('/').pop();
+    const assets = entries.map((entry, index) => {
+        const filename = new URL(entry.url, location.href).pathname.split('/').pop();
+        const baseName = filename && filename.length > 0 ? filename : 'gsplat';
+        const uniqueName = `${baseName}-${index}`;
 
-    const asset = new Asset(filename, 'gsplat', {
-        url: contentUrl,
-        filename,
-        contents
+        const asset = new Asset(uniqueName, 'gsplat', {
+            url: entry.url,
+            filename: baseName,
+            contents: entry.contents
+        });
+
+        asset.on('error', (err) => {
+            console.log(err);
+        });
+
+        app.assets.add(asset);
+        app.assets.load(asset);
+        return asset;
     });
 
-    asset.on('load', () => {
-        const entity = new Entity('gsplat');
-        entity.setLocalEulerAngles(0, 0, 180);
-        entity.addComponent('gsplat', { asset });
-        app.root.addChild(entity);
+    if (assets.length === 0) {
+        return;
+    }
+
+    const entity = new Entity('gsplat');
+    entity.setLocalEulerAngles(0, 0, 180);
+
+    let currentIndex = -1;
+    let frameCounter = 0;
+
+    const setAsset = (index) => {
+        const asset = assets[index];
+        if (!asset || !asset.loaded) {
+            return false;
+        }
+
+        if (!entity.gsplat) {
+            entity.addComponent('gsplat', { asset });
+            app.root.addChild(entity);
+        } else if (entity.gsplat.asset !== asset) {
+            entity.gsplat.asset = asset;
+        }
+
+        entity.gsplat.instance?.sort(entity);
+
+        currentIndex = index;
+        app.renderNextFrame = true;
+        return true;
+    };
+
+    assets.forEach((asset, index) => {
+        asset.on('load', () => {
+            if (index === 0) {
+                setAsset(0);
+                return;
+            }
+
+            if (currentIndex === -1) {
+                setAsset(index);
+            }
+        });
     });
 
-    asset.on('error', (err) => {
-        console.log(err);
-    });
+    app.on('frameend', () => {
+        if (!entity.gsplat || assets.length < 2) {
+            return;
+        }
 
-    app.assets.add(asset);
-    app.assets.load(asset);
+        frameCounter += 1;
+        if (frameCounter % 10 !== 0) {
+            return;
+        }
+
+        for (let step = 1; step < assets.length; step++) {
+            const nextIndex = (currentIndex + step) % assets.length;
+            if (assets[nextIndex].loaded) {
+                setAsset(nextIndex);
+                break;
+            }
+        }
+    });
 };
 
 const waitForGsplat = (app, state) => {
