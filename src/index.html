@@ -9,7 +9,17 @@
         <script type="module">
             const url = new URL(location.href);
             const settingsUrl = url.searchParams.has('settings') ? url.searchParams.get('settings') : './settings.json';
-            const contentUrl = url.searchParams.has('content') ? url.searchParams.get('content') : './scene.compressed.ply';
+            const defaultContentUrl = './scene.compressed.ply';
+            const contentParams = url.searchParams.getAll('content');
+            const contentUrls = contentParams.length > 0 ? contentParams : [defaultContentUrl];
+            const contentEntries = contentUrls.map((entryUrl) => {
+                return {
+                    url: entryUrl,
+                    contents: fetch(entryUrl)
+                };
+            });
+            const [firstEntry] = contentEntries;
+            const contentUrl = firstEntry.url;
             const params = {};
 
             // apply url parameter overrides
@@ -29,7 +39,9 @@
                 poster: params.posterUrl && createImage(params.posterUrl),
                 settings: fetch(settingsUrl).then(response => response.json()),
                 contentUrl,
-                contents: fetch(contentUrl),
+                contentUrls,
+                contentEntries,
+                contents: firstEntry.contents,
                 params
             };
         </script>
