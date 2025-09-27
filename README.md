@@ -9,11 +9,11 @@
 
 | [User Manual](https://developer.playcanvas.com/user-manual/gaussian-splatting/editing/supersplat/import-export/#html-viewer-htmlzip) | [Blog](https://blog.playcanvas.com) | [Forum](https://forum.playcanvas.com) |
 
-This is the official viewer for https://superspl.at and the SuperSplat Editor HTML export.
+This is the official viewer for [SuperSplat](https://superspl.at).
 
 <img width="1114" height="739" alt="supersplat-viewer" src="https://github.com/user-attachments/assets/15d2c654-9484-4265-a279-99acb65e38c9" />
 
-This webapp compiles to simple, self-contained, static website.
+This web app compiles to a simple, self-contained, static website.
 
 The app supports a few useful URL parameters (though please note these are subject to change):
 - `&settings=url` - specify the URL of the `settings.json` file (default is `./settings.json`)
