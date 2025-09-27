@@ -11,7 +11,7 @@
 
 This is the official viewer for https://superspl.at and the SuperSplat Editor HTML export.
 
-<img width="1088" alt="Screenshot 2025-04-11 at 13 36 02" src="https://github.com/user-attachments/assets/a5e2a2eb-3064-4d73-beb9-eb9c4708b2b2" />
+<img width="1114" height="739" alt="supersplat-viewer" src="https://github.com/user-attachments/assets/15d2c654-9484-4265-a279-99acb65e38c9" />
 
 This webapp compiles to simple, self-contained, static website.
 
