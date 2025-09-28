@@ -13,23 +13,23 @@ This is the official viewer for [SuperSplat](https://superspl.at).
 
 <img width="1114" height="739" alt="supersplat-viewer" src="https://github.com/user-attachments/assets/15d2c654-9484-4265-a279-99acb65e38c9" />
 
-This web app compiles to a simple, self-contained, static website.
+The web app compiles to a simple, self-contained static website.
 
 The app supports a few useful URL parameters (though please note these are subject to change):
 - `&settings=url` - specify the URL of the `settings.json` file (default is `./settings.json`)
 - `&content=url` - specify the URL of the `scene.compressed.ply` file (default is `./scene.compressed.ply`)
 
-As well as the following:
+Additional options:
 - `&noui` - hide UI
 - `&noanim` - start with animation paused
 - `&poster=url` - show an image while loading the scene content
 - `&ministats` - show the runtime CPU (and on desktop, GPU) performance graphs
 - `&skybox=url` - specify an equirectangular skybox image for the skybox
 
-The webapp source files is available as strings for templating when imported as an NPM module:
+The web app source files are available as strings for templating when you import the package from npm:
 
 ```ts
-import { html, css, js } from '@playcanvas/supersplat-viewer`;
+import { html, css, js } from '@playcanvas/supersplat-viewer';
 
 // logs the source of index.html
 console.log(html);
@@ -58,17 +58,17 @@ To initialize a local development environment for SuperSplat Viewer, ensure you 
    npm install
    ```
 
-3. Build SuperSplat Viewer and start a local web server:
+3. Start the development build and local web server:
 
    ```sh
    npm run develop
    ```
 
-4. Open the browser at http://localhost:3000.
+4. Open your browser at http://localhost:3000.
 
 ## Settings Schema
 
-The `settings.json` file has the following schema (as defined in typescript, taken from SuperSplat editor):
+The `settings.json` file has the following schema (defined in TypeScript and taken from the SuperSplat editor):
 
 
 ```typescript
