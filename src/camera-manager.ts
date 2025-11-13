@@ -9,7 +9,7 @@ import { Camera, type CameraFrame, type CameraController } from './cameras/camer
 import { FlyController } from './cameras/fly-controller';
 import { OrbitController } from './cameras/orbit-controller';
 import { easeOut } from './core/math';
-import { AnimTrack } from './settings';
+import { Annotation } from './settings';
 import { CameraMode, Global } from './types';
 
 const tmpCamera = new Camera();
@@ -41,36 +41,28 @@ class CameraManager {
     constructor(global: Global, bbox: BoundingBox) {
         const { events, settings, state } = global;
 
-        const fov = settings.camera.fov ?? 65;
-        const frameCamera = createFrameCamera(bbox, fov);
-        const resetCamera = createCamera(
-            new Vec3(settings.camera.position ?? [2, 1, 2]),
-            new Vec3(settings.camera.target ?? [0, 0, 0]),
-            fov
-        );
+        const camera0 = settings.cameras[0].initial;
+        const frameCamera = createFrameCamera(bbox, camera0.fov);
+        const resetCamera = createCamera(new Vec3(camera0.position), new Vec3(camera0.target), camera0.fov);
 
         const getAnimTrack = (initial: Camera, isObjectExperience: boolean) => {
-            const { animTracks, camera } = settings;
+            const { animTracks } = settings;
 
             // extract the camera animation track from settings
-            if (animTracks?.length > 0 && camera.startAnim === 'animTrack') {
-                const track = animTracks.find((track: AnimTrack) => track.name === camera.animTrack);
-                if (track) {
-                    return track;
-                }
+            if (animTracks?.length > 0 && settings.startMode === 'animTrack') {
+                // use the first animTrack
+                return animTracks[0];
             } else if (isObjectExperience) {
                 // create basic rotation animation if no anim track is specified
                 initial.calcFocusPoint(tmpv);
-                return createRotateTrack(initial.position, tmpv);
+                return createRotateTrack(initial.position, tmpv, initial.fov);
             }
             return null;
         };
 
-        // calculate the user camera start position (the pose we'll use if there is no animation)
-        const useReset = settings.camera.position || settings.camera.target || bbox.halfExtents.length() > 100;
-        const userStart = useReset ? resetCamera : frameCamera;
-        const isObjectExperience = !bbox.containsPoint(userStart.position);
-        const animTrack = getAnimTrack(userStart, isObjectExperience);
+        // object experience starts outside the bounding box
+        const isObjectExperience = !bbox.containsPoint(resetCamera.position);
+        const animTrack = getAnimTrack(settings.hasStartPose ? resetCamera : frameCamera, isObjectExperience);
 
         const controllers = {
             orbit: new OrbitController(),
@@ -88,7 +80,7 @@ class CameraManager {
 
         // initialize camera mode and initial camera position
         state.cameraMode = state.hasAnimation ? 'anim' : (isObjectExperience ? 'orbit' : 'fly');
-        this.camera.copy(userStart);
+        this.camera.copy(resetCamera);
 
         const target = new Camera(this.camera);             // the active controller updates this
         const from = new Camera(this.camera);               // stores the previous camera state during transition
@@ -193,6 +185,22 @@ class CameraManager {
             // construct camera
             tmpCamera.copy(this.camera);
             tmpCamera.look(this.camera.position, position);
+
+            controllers.orbit.goto(tmpCamera);
+        });
+
+        events.on('annotation.activate', (annotation: Annotation) => {
+            // switch to orbit camera on pick
+            state.cameraMode = 'orbit';
+
+            const { initial } = annotation.camera;
+
+            // construct camera
+            tmpCamera.fov = initial.fov;
+            tmpCamera.look(
+                new Vec3(initial.position),
+                new Vec3(initial.target)
+            );
 
             controllers.orbit.goto(tmpCamera);
         });

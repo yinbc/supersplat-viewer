@@ -10,14 +10,16 @@ import { AnimTrack } from '../settings';
  *
  * @param position - Starting location of the camera.
  * @param target - Target point around which to rotate
+ * @param fov - The camera field of view.
  * @param keys - The number of keys in the animation.
  * @param duration - The duration of the animation in seconds.
  * @returns - The animation track object containing position and target keyframes.
  */
-const createRotateTrack = (position: Vec3, target: Vec3, keys: number = 12, duration: number = 20): AnimTrack => {
+const createRotateTrack = (position: Vec3, target: Vec3, fov: number, keys: number = 12, duration: number = 20): AnimTrack => {
     const times = new Array(keys).fill(0).map((_, i) => i / keys * duration);
     const positions: number[] = [];
     const targets: number[] = [];
+    const fovs = new Array(keys).fill(fov);
 
     const mat = new Mat4();
     const vec = new Vec3();
@@ -44,7 +46,6 @@ const createRotateTrack = (position: Vec3, target: Vec3, keys: number = 12, dura
         name: 'rotate',
         duration,
         frameRate: 1,
-        target: 'camera',
         loopMode: 'repeat',
         interpolation: 'spline',
         smoothness: 1,
@@ -52,7 +53,8 @@ const createRotateTrack = (position: Vec3, target: Vec3, keys: number = 12, dura
             times,
             values: {
                 position: positions,
-                target: targets
+                target: targets,
+                fov: fovs
             }
         }
     };
