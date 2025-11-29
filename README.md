@@ -114,6 +114,7 @@ type ExperienceSettings = {
     "position": [0,1,-1],
     "target": [0,0,0],
     "startAnim": "orbit"
-  }
+  },
+  animTracks: []
 }
 ```
