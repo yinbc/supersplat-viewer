@@ -6,7 +6,7 @@ import {
     type CameraComponent
 } from 'playcanvas';
 import { XrControllers } from 'playcanvas/scripts/esm/xr-controllers.mjs';
-import { XrNavigation } from 'playcanvas/scripts/esm/xr-navigation.mjs';
+import { XrNavigation } from './xr-navigation';
 
 import { Global } from './types';
 
