@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SuperSplat Viewer - 文件管理</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            min-height: 100vh;
+        }
+        .container { max-width: 960px; margin: 0 auto; padding: 24px; }
+        h1 {
+            font-size: 24px;
+            margin-bottom: 24px;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        h1 a {
+            font-size: 14px;
+            color: #64b5f6;
+            text-decoration: none;
+            margin-left: auto;
+        }
+        h1 a:hover { text-decoration: underline; }
+
+        /* Upload Section */
+        .upload-section {
+            background: #16213e;
+            border: 2px dashed #364f6b;
+            border-radius: 12px;
+            padding: 32px;
+            text-align: center;
+            margin-bottom: 24px;
+            transition: border-color 0.2s, background 0.2s;
+            cursor: pointer;
+        }
+        .upload-section.dragover {
+            border-color: #64b5f6;
+            background: #1a2744;
+        }
+        .upload-section p { color: #8899aa; margin-bottom: 12px; }
+        .upload-section .hint { font-size: 13px; color: #556677; }
+        .upload-btn {
+            display: inline-block;
+            padding: 10px 24px;
+            background: #0f3460;
+            color: #64b5f6;
+            border: 1px solid #1a5276;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-top: 8px;
+        }
+        .upload-btn:hover { background: #1a5276; }
+        #fileInput { display: none; }
+
+        /* Progress */
+        .upload-progress {
+            display: none;
+            margin-top: 12px;
+        }
+        .upload-progress .bar-bg {
+            height: 6px;
+            background: #2a3a5a;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .upload-progress .bar-fill {
+            height: 100%;
+            background: #64b5f6;
+            width: 0%;
+            transition: width 0.3s;
+        }
+        .upload-progress .status {
+            font-size: 13px;
+            color: #8899aa;
+            margin-top: 6px;
+        }
+
+        /* Current Config */
+        .config-section {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+        .config-section h2 {
+            font-size: 16px;
+            margin-bottom: 12px;
+            color: #aaa;
+        }
+        .config-active {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .config-active .tag {
+            padding: 6px 14px;
+            background: #0f3460;
+            border-radius: 6px;
+            font-size: 14px;
+            color: #64b5f6;
+        }
+        .config-active .tag.empty { color: #666; background: #1a1a2e; }
+        .config-active .clear-btn {
+            padding: 6px 14px;
+            background: #5a1a1a;
+            color: #ff8a80;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .config-active .clear-btn:hover { background: #7a2a2a; }
+        .config-active .view-btn {
+            padding: 6px 14px;
+            background: #1a5a2a;
+            color: #69f0ae;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            text-decoration: none;
+        }
+        .config-active .view-btn:hover { background: #2a7a3a; }
+
+        /* File List */
+        .file-list-section h2 {
+            font-size: 16px;
+            margin-bottom: 12px;
+            color: #aaa;
+        }
+        .file-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .file-table th {
+            text-align: left;
+            padding: 10px 12px;
+            border-bottom: 1px solid #2a3a5a;
+            color: #8899aa;
+            font-weight: 500;
+            font-size: 13px;
+        }
+        .file-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #1a2a3a;
+            font-size: 14px;
+        }
+        .file-table tr:hover td { background: #1a2744; }
+        .file-name { font-weight: 500; color: #e0e0e0; }
+        .file-size { color: #8899aa; }
+        .file-time { color: #8899aa; font-size: 13px; }
+        .file-actions { display: flex; gap: 8px; }
+        .btn {
+            padding: 5px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .btn-set-ply { background: #0f3460; color: #64b5f6; }
+        .btn-set-ply:hover { background: #1a5276; }
+        .btn-set-json { background: #1a4a3a; color: #69f0ae; }
+        .btn-set-json:hover { background: #2a5a4a; }
+        .btn-delete { background: #3a1a1a; color: #ff8a80; }
+        .btn-delete:hover { background: #5a2a2a; }
+        .btn-download { background: #2a2a4a; color: #b39ddb; }
+        .btn-download:hover { background: #3a3a5a; }
+
+        .empty-msg {
+            text-align: center;
+            color: #556677;
+            padding: 40px;
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            z-index: 1000;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.3s;
+        }
+        .toast.show { opacity: 1; transform: translateY(0); }
+        .toast.success { background: #1a5a2a; color: #69f0ae; }
+        .toast.error { background: #5a1a1a; color: #ff8a80; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>
+            SuperSplat Viewer 文件管理
+            <a href="/" target="_blank">打开查看器 &rarr;</a>
+        </h1>
+
+        <!-- Upload -->
+        <div class="upload-section" id="dropZone">
+            <p>拖拽文件到此处上传，或点击选择文件</p>
+            <div class="hint">支持 .ply 和 .json 文件，最大 500MB</div>
+            <label class="upload-btn">
+                选择文件
+                <input type="file" id="fileInput" multiple accept=".ply,.json">
+            </label>
+            <div class="upload-progress" id="uploadProgress">
+                <div class="bar-bg"><div class="bar-fill" id="progressBar"></div></div>
+                <div class="status" id="uploadStatus"></div>
+            </div>
+        </div>
+
+        <!-- Config -->
+        <div class="config-section">
+            <h2>当前渲染配置</h2>
+            <div class="config-active" id="configDisplay">
+                <span class="tag empty">未配置</span>
+            </div>
+        </div>
+
+        <!-- File list -->
+        <div class="file-list-section">
+            <h2>已上传文件</h2>
+            <div id="fileListContainer">
+                <div class="empty-msg">暂无文件</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const API = '';
+
+        function showToast(msg, type = 'success') {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.className = `toast ${type} show`;
+            setTimeout(() => t.classList.remove('show'), 3000);
+        }
+
+        function formatSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        function formatTime(dateStr) {
+            const d = new Date(dateStr);
+            return d.toLocaleString('zh-CN');
+        }
+
+        async function loadFiles() {
+            const res = await fetch(`${API}/api/files`);
+            const data = await res.json();
+            renderFileList(data.files);
+            renderConfig(data.active);
+        }
+
+        function renderConfig(active) {
+            const el = document.getElementById('configDisplay');
+            if (!active) {
+                el.innerHTML = '<span class="tag empty">未配置 - 请从文件列表中设置 PLY 文件</span>';
+                return;
+            }
+            el.innerHTML = `
+                <span class="tag">PLY: ${active.ply}</span>
+                ${active.settings ? `<span class="tag">Settings: ${active.settings}</span>` : '<span class="tag empty">无 Settings</span>'}
+                <a class="view-btn" href="/" target="_blank">查看渲染效果</a>
+                <button class="clear-btn" onclick="clearConfig()">清除配置</button>
+            `;
+        }
+
+        function renderFileList(files) {
+            const container = document.getElementById('fileListContainer');
+            if (!files || files.length === 0) {
+                container.innerHTML = '<div class="empty-msg">暂无文件，请上传 .ply 或 .json 文件</div>';
+                return;
+            }
+            // Sort: newest first
+            files.sort((a, b) => new Date(b.mtime) - new Date(a.mtime));
+
+            let html = `<table class="file-table">
+                <thead><tr>
+                    <th>文件名</th>
+                    <th>大小</th>
+                    <th>上传时间</th>
+                    <th>操作</th>
+                </tr></thead><tbody>`;
+
+            for (const f of files) {
+                const ext = f.name.split('.').pop().toLowerCase();
+                const isPly = ext === 'ply';
+                const isJson = ext === 'json';
+                html += `<tr>
+                    <td class="file-name">${f.name}</td>
+                    <td class="file-size">${formatSize(f.size)}</td>
+                    <td class="file-time">${formatTime(f.mtime)}</td>
+                    <td class="file-actions">
+                        ${isPly ? `<button class="btn btn-set-ply" onclick="setAsPly('${f.name}')">设为 PLY</button>` : ''}
+                        ${isJson ? `<button class="btn btn-set-json" onclick="setAsSettings('${f.name}')">设为 Settings</button>` : ''}
+                        <a class="btn btn-download" href="/uploads/${f.name}" download>下载</a>
+                        <button class="btn btn-delete" onclick="deleteFile('${f.name}')">删除</button>
+                    </td>
+                </tr>`;
+            }
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        // Upload
+        async function uploadFiles(fileList) {
+            if (!fileList.length) return;
+            const formData = new FormData();
+            for (const f of fileList) {
+                formData.append('files', f);
+            }
+
+            const progress = document.getElementById('uploadProgress');
+            const bar = document.getElementById('progressBar');
+            const status = document.getElementById('uploadStatus');
+            progress.style.display = 'block';
+            bar.style.width = '0%';
+            status.textContent = '上传中...';
+
+            try {
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', `${API}/api/upload`);
+
+                xhr.upload.onprogress = (e) => {
+                    if (e.lengthComputable) {
+                        const pct = Math.round((e.loaded / e.total) * 100);
+                        bar.style.width = pct + '%';
+                        status.textContent = `上传中... ${pct}%`;
+                    }
+                };
+
+                xhr.onload = () => {
+                    progress.style.display = 'none';
+                    if (xhr.status === 200) {
+                        const result = JSON.parse(xhr.responseText);
+                        showToast(`成功上传 ${result.files.length} 个文件`);
+                        loadFiles();
+                    } else {
+                        const err = JSON.parse(xhr.responseText);
+                        showToast(err.error || '上传失败', 'error');
+                    }
+                };
+
+                xhr.onerror = () => {
+                    progress.style.display = 'none';
+                    showToast('上传失败，请检查网络', 'error');
+                };
+
+                xhr.send(formData);
+            } catch (err) {
+                progress.style.display = 'none';
+                showToast('上传失败: ' + err.message, 'error');
+            }
+        }
+
+        // Delete
+        async function deleteFile(name) {
+            if (!confirm(`确定要删除 "${name}" 吗？`)) return;
+            const res = await fetch(`${API}/api/files/${encodeURIComponent(name)}`, { method: 'DELETE' });
+            if (res.ok) {
+                showToast(`已删除 ${name}`);
+                loadFiles();
+            } else {
+                const err = await res.json();
+                showToast(err.error || '删除失败', 'error');
+            }
+        }
+
+        // Set PLY
+        async function setAsPly(name) {
+            // Get current config first to preserve settings
+            const cfgRes = await fetch(`${API}/api/config`);
+            const cfg = await cfgRes.json();
+            const body = { ply: name, settings: cfg.active?.settings || null };
+            const res = await fetch(`${API}/api/config`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            if (res.ok) {
+                showToast(`已设置 PLY: ${name}`);
+                loadFiles();
+            } else {
+                const err = await res.json();
+                showToast(err.error || '设置失败', 'error');
+            }
+        }
+
+        // Set Settings JSON
+        async function setAsSettings(name) {
+            const cfgRes = await fetch(`${API}/api/config`);
+            const cfg = await cfgRes.json();
+            if (!cfg.active?.ply) {
+                showToast('请先设置 PLY 文件', 'error');
+                return;
+            }
+            const body = { ply: cfg.active.ply, settings: name };
+            const res = await fetch(`${API}/api/config`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            if (res.ok) {
+                showToast(`已设置 Settings: ${name}`);
+                loadFiles();
+            } else {
+                const err = await res.json();
+                showToast(err.error || '设置失败', 'error');
+            }
+        }
+
+        // Clear config
+        async function clearConfig() {
+            const res = await fetch(`${API}/api/config/clear`, { method: 'POST' });
+            if (res.ok) {
+                showToast('已清除配置');
+                loadFiles();
+            }
+        }
+
+        // Drag & drop
+        const dropZone = document.getElementById('dropZone');
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            uploadFiles(e.dataTransfer.files);
+        });
+
+        document.getElementById('fileInput').addEventListener('change', (e) => {
+            uploadFiles(e.target.files);
+            e.target.value = '';
+        });
+
+        // Init
+        loadFiles();
+    </script>
+</body>
+</html>
