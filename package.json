@@ -60,10 +60,11 @@
   },
   "scripts": {
     "build": "rollup -c",
-    "develop": "concurrently --kill-others \"npm run watch\" \"npm run serve\"",
+    "develop": "concurrently --kill-others \"npm run watch\" \"npm run server\"",
     "lint": "eslint src rollup.config.mjs eslint.config.mjs",
     "lint:fix": "eslint src rollup.config.mjs eslint.config.mjs --fix",
     "publint": "publint",
+    "server": "node server.js",
     "serve": "serve public -C -c ../serve.json",
     "test": "echo \"Error: no test specified\" && exit 1",
     "type:check": "tsc --noEmit",
@@ -71,5 +72,9 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "multer": "^2.1.1"
   }
 }

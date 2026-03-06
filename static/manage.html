@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SuperSplat Viewer - 模型管理</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f0f13;
+            color: #e0e0e0;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: #1a1a24;
+            border-bottom: 1px solid #2a2a3a;
+            padding: 16px 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .header h1 {
+            font-size: 20px;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .header .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header .logo svg {
+            fill: #7c6cff;
+            width: 28px;
+            height: 28px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 32px;
+        }
+
+        /* Upload Section */
+        .upload-section {
+            background: #1a1a24;
+            border: 1px solid #2a2a3a;
+            border-radius: 12px;
+            padding: 28px;
+            margin-bottom: 32px;
+        }
+
+        .upload-section h2 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #fff;
+        }
+
+        .upload-form {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .form-group label {
+            font-size: 13px;
+            color: #999;
+            font-weight: 500;
+        }
+
+        .form-group input[type="text"] {
+            background: #0f0f13;
+            border: 1px solid #2a2a3a;
+            border-radius: 8px;
+            padding: 10px 14px;
+            color: #e0e0e0;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+            width: 280px;
+        }
+
+        .form-group input[type="text"]:focus {
+            border-color: #7c6cff;
+        }
+
+        .file-drop-zone {
+            border: 2px dashed #2a2a3a;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .file-drop-zone:hover,
+        .file-drop-zone.dragover {
+            border-color: #7c6cff;
+            background: rgba(124, 108, 255, 0.05);
+        }
+
+        .file-drop-zone input[type="file"] {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .file-drop-zone .icon {
+            font-size: 36px;
+            margin-bottom: 8px;
+        }
+
+        .file-drop-zone .text {
+            font-size: 14px;
+            color: #999;
+        }
+
+        .file-drop-zone .hint {
+            font-size: 12px;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .selected-files {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .selected-file-tag {
+            background: #2a2a3a;
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-size: 12px;
+            color: #ccc;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .selected-file-tag .size {
+            color: #888;
+        }
+
+        .btn {
+            padding: 10px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-primary {
+            background: #7c6cff;
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            background: #6b5ce7;
+        }
+
+        .btn-primary:disabled {
+            background: #3a3a4a;
+            color: #666;
+            cursor: not-allowed;
+        }
+
+        .btn-danger {
+            background: transparent;
+            color: #ff5c5c;
+            border: 1px solid #ff5c5c33;
+            padding: 6px 14px;
+            font-size: 13px;
+        }
+
+        .btn-danger:hover {
+            background: #ff5c5c15;
+        }
+
+        .btn-view {
+            background: transparent;
+            color: #7c6cff;
+            border: 1px solid #7c6cff33;
+            padding: 6px 14px;
+            font-size: 13px;
+        }
+
+        .btn-view:hover {
+            background: #7c6cff15;
+        }
+
+        /* Upload progress */
+        .upload-progress {
+            display: none;
+            margin-top: 12px;
+        }
+
+        .upload-progress.active {
+            display: block;
+        }
+
+        .progress-bar {
+            height: 4px;
+            background: #2a2a3a;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .progress-bar .fill {
+            height: 100%;
+            background: #7c6cff;
+            border-radius: 2px;
+            transition: width 0.3s;
+            width: 0%;
+        }
+
+        .progress-text {
+            font-size: 12px;
+            color: #999;
+            margin-top: 6px;
+        }
+
+        /* Folders Section */
+        .folders-section h2 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: #fff;
+        }
+
+        .folders-empty {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .folder-card {
+            background: #1a1a24;
+            border: 1px solid #2a2a3a;
+            border-radius: 12px;
+            margin-bottom: 12px;
+            overflow: hidden;
+            transition: border-color 0.2s;
+        }
+
+        .folder-card:hover {
+            border-color: #3a3a4a;
+        }
+
+        .folder-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .folder-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .folder-icon {
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .folder-name {
+            font-size: 15px;
+            font-weight: 500;
+            color: #fff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .folder-meta {
+            display: flex;
+            gap: 16px;
+            font-size: 12px;
+            color: #888;
+            flex-shrink: 0;
+        }
+
+        .folder-actions {
+            display: flex;
+            gap: 8px;
+            margin-left: 16px;
+            flex-shrink: 0;
+        }
+
+        .folder-files {
+            display: none;
+            border-top: 1px solid #2a2a3a;
+            padding: 12px 20px;
+            background: #15151f;
+        }
+
+        .folder-files.open {
+            display: block;
+        }
+
+        .file-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 0;
+            font-size: 13px;
+        }
+
+        .file-row + .file-row {
+            border-top: 1px solid #1e1e2e;
+        }
+
+        .file-name {
+            color: #ccc;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .file-name .icon {
+            color: #888;
+            font-size: 14px;
+        }
+
+        .file-meta {
+            display: flex;
+            gap: 16px;
+            color: #888;
+            font-size: 12px;
+        }
+
+        /* Toast notification */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: #2a2a3a;
+            color: #fff;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.3s;
+            z-index: 1000;
+        }
+
+        .toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .toast.error {
+            background: #ff5c5c;
+        }
+
+        .toast.success {
+            background: #4caf50;
+        }
+
+        /* Confirm dialog */
+        .overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 900;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .overlay.active {
+            display: flex;
+        }
+
+        .confirm-dialog {
+            background: #1a1a24;
+            border: 1px solid #2a2a3a;
+            border-radius: 12px;
+            padding: 24px;
+            min-width: 360px;
+        }
+
+        .confirm-dialog h3 {
+            font-size: 16px;
+            margin-bottom: 12px;
+        }
+
+        .confirm-dialog p {
+            font-size: 14px;
+            color: #999;
+            margin-bottom: 20px;
+        }
+
+        .confirm-dialog .actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        .btn-cancel {
+            background: #2a2a3a;
+            color: #ccc;
+        }
+
+        .btn-cancel:hover {
+            background: #3a3a4a;
+        }
+
+        .btn-confirm-delete {
+            background: #ff5c5c;
+            color: #fff;
+        }
+
+        .btn-confirm-delete:hover {
+            background: #e04545;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 16px;
+            }
+
+            .form-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .form-group input[type="text"] {
+                width: 100%;
+            }
+
+            .folder-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+
+            .folder-actions {
+                margin-left: 0;
+            }
+
+            .folder-meta {
+                flex-wrap: wrap;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+                <path d="M23.9977 6.30034H23.9995C24.0334 6.29576 24.059 6.28019 24.0883 6.27011C25.6254 6.05759 26.8135 4.75228 26.8135 3.15658C26.8135 1.41249 25.4001 0 23.6569 0C21.9137 0 20.5003 1.41341 20.5003 3.15658C20.5003 3.54955 20.5809 3.92145 20.7128 4.26862C20.7165 4.27961 20.7119 4.29152 20.7165 4.30343C21.6829 6.97636 18.671 6.46705 17.1376 6.20324C17.0928 6.195 17.057 6.19683 17.0167 6.19316C16.6256 6.14187 16.2299 6.10431 15.8232 6.10431C10.8831 6.10431 6.87921 10.1082 6.87921 15.0483C6.87921 15.9496 7.01478 16.818 7.26393 17.6387C7.2676 17.6479 7.26393 17.6543 7.26851 17.6635C8.09018 20.4253 5.91006 19.9984 4.93085 20.0167C4.83558 20.0048 4.7394 19.9874 4.63955 19.9874C3.40202 19.9874 2.3999 20.9895 2.3999 22.2271C2.3999 23.4646 3.40202 24.4667 4.63955 24.4667C5.71037 24.4667 6.60349 23.7137 6.82424 22.7089H6.82608C7.40408 20.275 9.19855 21.0582 9.67946 21.5483C9.69778 21.5666 9.7161 21.5721 9.7335 21.5868C11.331 23.0753 13.4663 23.9922 15.8222 23.9922C15.8836 23.9922 15.945 23.984 16.0064 23.9831C16.0668 23.984 16.1264 23.9867 16.1932 23.9867C17.0818 23.9831 17.8256 24.9861 16.6457 26.7054H16.6576C16.2528 27.256 16.0073 27.9292 16.0073 28.6666C16.0073 30.5069 17.4995 32 19.3406 32C21.1818 32 22.674 30.5078 22.674 28.6666C22.674 27.256 21.7937 26.0569 20.5562 25.5696C20.5269 25.5558 20.5003 25.543 20.4664 25.5284C19.3416 25.0759 18.137 23.9079 19.8353 23.046L19.8316 23.0368C22.7565 21.5657 24.7671 18.5465 24.7671 15.0492C24.7671 13.1118 24.1442 11.3228 23.0972 9.85905C23.0853 9.83798 23.0761 9.816 23.0569 9.79126C20.9363 6.89025 22.8398 6.4872 24.0004 6.30217H23.9995L23.9977 6.30034Z"/>
+            </svg>
+            <h1>SuperSplat 模型管理</h1>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Upload Section -->
+        <div class="upload-section">
+            <h2>上传模型文件</h2>
+            <div class="upload-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>文件夹名称</label>
+                        <input type="text" id="folderName" placeholder="输入文件夹名称（如：my-model）">
+                    </div>
+                    <button class="btn btn-primary" id="uploadBtn" disabled>
+                        <span>上传文件</span>
+                    </button>
+                </div>
+
+                <div class="file-drop-zone" id="dropZone">
+                    <input type="file" id="fileInput" multiple>
+                    <div class="icon">&#128193;</div>
+                    <div class="text">点击选择文件或拖拽文件到此处</div>
+                    <div class="hint">支持 meta.json、settings.json、.ply、.sog 等模型文件</div>
+                </div>
+
+                <div class="selected-files" id="selectedFiles"></div>
+
+                <div class="upload-progress" id="uploadProgress">
+                    <div class="progress-bar">
+                        <div class="fill" id="progressFill"></div>
+                    </div>
+                    <div class="progress-text" id="progressText">上传中...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Folders List Section -->
+        <div class="folders-section">
+            <h2>已上传的模型</h2>
+            <div id="foldersList"></div>
+        </div>
+    </div>
+
+    <!-- Confirm Delete Dialog -->
+    <div class="overlay" id="confirmOverlay">
+        <div class="confirm-dialog">
+            <h3>确认删除</h3>
+            <p id="confirmText">确定要删除此文件夹及其所有文件吗？此操作不可恢复。</p>
+            <div class="actions">
+                <button class="btn btn-cancel" id="cancelDelete">取消</button>
+                <button class="btn btn-confirm-delete" id="confirmDelete">删除</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const folderNameInput = document.getElementById('folderName');
+        const fileInput = document.getElementById('fileInput');
+        const dropZone = document.getElementById('dropZone');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const selectedFilesDiv = document.getElementById('selectedFiles');
+        const uploadProgress = document.getElementById('uploadProgress');
+        const progressFill = document.getElementById('progressFill');
+        const progressText = document.getElementById('progressText');
+        const foldersList = document.getElementById('foldersList');
+        const confirmOverlay = document.getElementById('confirmOverlay');
+        const toast = document.getElementById('toast');
+
+        let selectedFiles = [];
+        let deleteTarget = null;
+
+        // Format file size
+        function formatSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+
+        // Format date
+        function formatDate(dateStr) {
+            if (!dateStr) return '-';
+            const d = new Date(dateStr);
+            return d.toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        // Show toast
+        function showToast(message, type = '') {
+            toast.textContent = message;
+            toast.className = 'toast ' + type;
+            setTimeout(() => toast.classList.add('show'), 10);
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        // Update upload button state
+        function updateUploadBtn() {
+            uploadBtn.disabled = !folderNameInput.value.trim() || selectedFiles.length === 0;
+        }
+
+        // Show selected files
+        function renderSelectedFiles() {
+            selectedFilesDiv.innerHTML = selectedFiles.map(f =>
+                `<div class="selected-file-tag">
+                    ${f.name} <span class="size">${formatSize(f.size)}</span>
+                </div>`
+            ).join('');
+            updateUploadBtn();
+        }
+
+        // File input change
+        fileInput.addEventListener('change', (e) => {
+            selectedFiles = Array.from(e.target.files);
+            renderSelectedFiles();
+        });
+
+        // Drag & drop
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            selectedFiles = Array.from(e.dataTransfer.files);
+            renderSelectedFiles();
+        });
+
+        folderNameInput.addEventListener('input', updateUploadBtn);
+
+        // Upload
+        uploadBtn.addEventListener('click', async () => {
+            const folderName = folderNameInput.value.trim();
+            if (!folderName || selectedFiles.length === 0) return;
+
+            uploadBtn.disabled = true;
+            uploadProgress.classList.add('active');
+            progressFill.style.width = '0%';
+            progressText.textContent = '上传中...';
+
+            const formData = new FormData();
+            formData.append('folderName', folderName);
+            selectedFiles.forEach(f => formData.append('files', f));
+
+            try {
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', '/api/upload');
+
+                xhr.upload.onprogress = (e) => {
+                    if (e.lengthComputable) {
+                        const pct = Math.round((e.loaded / e.total) * 100);
+                        progressFill.style.width = pct + '%';
+                        progressText.textContent = `上传中... ${pct}%`;
+                    }
+                };
+
+                xhr.onload = () => {
+                    if (xhr.status === 200) {
+                        showToast('上传成功！', 'success');
+                        folderNameInput.value = '';
+                        fileInput.value = '';
+                        selectedFiles = [];
+                        selectedFilesDiv.innerHTML = '';
+                        loadFolders();
+                    } else {
+                        const resp = JSON.parse(xhr.responseText);
+                        showToast('上传失败: ' + (resp.error || '未知错误'), 'error');
+                    }
+                    uploadProgress.classList.remove('active');
+                    updateUploadBtn();
+                };
+
+                xhr.onerror = () => {
+                    showToast('上传失败，请检查网络', 'error');
+                    uploadProgress.classList.remove('active');
+                    updateUploadBtn();
+                };
+
+                xhr.send(formData);
+            } catch (err) {
+                showToast('上传失败: ' + err.message, 'error');
+                uploadProgress.classList.remove('active');
+                updateUploadBtn();
+            }
+        });
+
+        // Load folders
+        async function loadFolders() {
+            try {
+                const res = await fetch('/api/folders');
+                const folders = await res.json();
+
+                if (folders.length === 0) {
+                    foldersList.innerHTML = '<div class="folders-empty">暂无上传的模型文件夹</div>';
+                    return;
+                }
+
+                foldersList.innerHTML = folders.map(folder => `
+                    <div class="folder-card" data-folder="${folder.name}">
+                        <div class="folder-header" onclick="toggleFolder(this)">
+                            <div class="folder-info">
+                                <span class="folder-icon">&#128193;</span>
+                                <span class="folder-name">${folder.name}</span>
+                            </div>
+                            <div class="folder-meta">
+                                <span>${folder.files.length} 个文件</span>
+                                <span>${formatSize(folder.totalSize)}</span>
+                                <span>${formatDate(folder.uploadTime)}</span>
+                            </div>
+                            <div class="folder-actions">
+                                <button class="btn btn-view" onclick="event.stopPropagation(); viewFolder('${folder.name}')">查看模型</button>
+                                <button class="btn btn-danger" onclick="event.stopPropagation(); confirmDeleteFolder('${folder.name}')">删除</button>
+                            </div>
+                        </div>
+                        <div class="folder-files">
+                            ${folder.files.map(f => `
+                                <div class="file-row">
+                                    <span class="file-name">
+                                        <span class="icon">&#128196;</span>
+                                        ${f.name}
+                                    </span>
+                                    <div class="file-meta">
+                                        <span>${formatSize(f.size)}</span>
+                                        <span>${formatDate(f.mtime)}</span>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `).join('');
+            } catch (err) {
+                showToast('加载失败: ' + err.message, 'error');
+            }
+        }
+
+        // Toggle folder expand
+        function toggleFolder(header) {
+            const filesDiv = header.nextElementSibling;
+            filesDiv.classList.toggle('open');
+        }
+
+        // View folder in viewer
+        function viewFolder(name) {
+            window.open('/viewer?id=' + encodeURIComponent(name), '_blank');
+        }
+
+        // Confirm delete
+        function confirmDeleteFolder(name) {
+            deleteTarget = name;
+            document.getElementById('confirmText').textContent =
+                `确定要删除文件夹「${name}」及其所有文件吗？此操作不可恢复。`;
+            confirmOverlay.classList.add('active');
+        }
+
+        document.getElementById('cancelDelete').addEventListener('click', () => {
+            confirmOverlay.classList.remove('active');
+            deleteTarget = null;
+        });
+
+        document.getElementById('confirmDelete').addEventListener('click', async () => {
+            if (!deleteTarget) return;
+
+            try {
+                const res = await fetch('/api/folders/' + encodeURIComponent(deleteTarget), {
+                    method: 'DELETE'
+                });
+
+                if (res.ok) {
+                    showToast('删除成功', 'success');
+                    loadFolders();
+                } else {
+                    const data = await res.json();
+                    showToast('删除失败: ' + (data.error || '未知错误'), 'error');
+                }
+            } catch (err) {
+                showToast('删除失败: ' + err.message, 'error');
+            }
+
+            confirmOverlay.classList.remove('active');
+            deleteTarget = null;
+        });
+
+        // Close overlay on background click
+        confirmOverlay.addEventListener('click', (e) => {
+            if (e.target === confirmOverlay) {
+                confirmOverlay.classList.remove('active');
+                deleteTarget = null;
+            }
+        });
+
+        // Initial load
+        loadFolders();
+    </script>
+</body>
+</html>
