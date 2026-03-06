@@ -2,7 +2,7 @@ import type { Entity, EventHandler, AppBase } from 'playcanvas';
 
 import type { ExperienceSettings } from './settings';
 
-type CameraMode = 'orbit' | 'anim' | 'fly';
+type CameraMode = 'orbit' | 'anim' | 'fly' | 'walk';
 
 type InputMode = 'desktop' | 'touch';
 
@@ -12,19 +12,26 @@ type Config = {
     skyboxUrl?: string;
     contentUrl?: string;
     contents?: Promise<Response>;
+    voxelUrl?: string;
 
     noui: boolean;
     noanim: boolean;
+    nofx: boolean;                              // disable post effects
+    hpr?: boolean;                              // override highPrecisionRendering (undefined = use settings)
     ministats: boolean;
     colorize: boolean;                          // render with LOD colorization
     unified: boolean;                           // force unified rendering mode
     aa: boolean;                                // render with antialiasing
+    webgpu: boolean;                            // use WebGPU device
+    gpusort: boolean;                           // use GPU sorting for splats
+    heatmap: boolean;                           // render heatmap debug overlay (WebGPU only)
 };
 
 // observable state that can change at runtime
 type State = {
+    loaded: boolean;                            // true once first frame is rendered
     readyToRender: boolean;                     // don't render till this is set
-    hqMode: boolean;
+    retinaDisplay: boolean;
     progress: number;                           // content loading progress 0-100
     inputMode: InputMode;
     cameraMode: CameraMode;
@@ -34,8 +41,12 @@ type State = {
     animationPaused: boolean;
     hasAR: boolean;
     hasVR: boolean;
+    hasCollision: boolean;
+    hasVoxelOverlay: boolean;
+    voxelOverlayEnabled: boolean;
     isFullscreen: boolean;
     controlsHidden: boolean;
+    gamingControls: boolean;
 };
 
 type Global = {

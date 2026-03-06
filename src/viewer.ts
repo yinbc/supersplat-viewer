@@ -31,33 +31,20 @@ import { nearlyEquals } from './core/math';
 import { InputController } from './input-controller';
 import type { ExperienceSettings, PostEffectSettings } from './settings';
 import type { Global } from './types';
+import type { VoxelCollider } from './voxel-collider';
+import { VoxelDebugOverlay } from './voxel-debug-overlay';
+import { WalkCursor } from './walk-cursor';
 
-// override global pick to pack depth instead of meshInstance id
-const pickDepthGlsl = /* glsl */ `
-vec4 packFloat(float depth) {
-    uvec4 u = (uvec4(floatBitsToUint(depth)) >> uvec4(0u, 8u, 16u, 24u)) & 0xffu;
-    return vec4(u) / 255.0;
-}
-vec4 getPickOutput() {
-    return packFloat(gl_FragCoord.z);
-}
-`;
-
-const gammaChunk = `
+const gammaChunkGlsl = `
 vec3 prepareOutputFromGamma(vec3 gammaColor) {
     return gammaColor;
 }
 `;
 
-const pickDepthWgsl = /* wgsl */ `
-    fn packFloat(depth: f32) -> vec4f {
-        let u: vec4<u32> = (vec4<u32>(bitcast<u32>(depth)) >> vec4<u32>(0u, 8u, 16u, 24u)) & vec4<u32>(0xffu);
-        return vec4f(u) / 255.0;
-    }
-
-    fn getPickOutput() -> vec4f {
-        return packFloat(pcPosition.z);
-    }
+const gammaChunkWgsl = `
+fn prepareOutputFromGamma(gammaColor: vec3f) -> vec3f {
+    return gammaColor;
+}
 `;
 
 const tonemapTable: Record<string, number> = {
@@ -124,6 +111,9 @@ const anyPostEffectEnabled = (settings: PostEffectSettings): boolean => {
 
 const vec = new Vec3();
 
+// store the original isColorBufferSrgb so the override in updatePostEffects is idempotent
+const origIsColorBufferSrgb = RenderTarget.prototype.isColorBufferSrgb;
+
 class Viewer {
     global: Global;
 
@@ -137,7 +127,20 @@ class Viewer {
 
     forceRenderNextFrame = false;
 
-    constructor(global: Global, gsplatLoad: Promise<Entity>, skyboxLoad: Promise<void>) {
+    voxelOverlay: VoxelDebugOverlay | null = null;
+
+    walkCursor: WalkCursor | null = null;
+
+    origChunks: {
+        glsl: {
+            gsplatOutputVS: string
+        },
+        wgsl: {
+            gsplatOutputVS: string
+        }
+    };
+
+    constructor(global: Global, gsplatLoad: Promise<Entity>, skyboxLoad: Promise<void> | undefined, voxelLoad: Promise<VoxelCollider> | undefined) {
         this.global = global;
 
         const { app, settings, config, events, state, camera } = global;
@@ -146,20 +149,24 @@ class Viewer {
         // enable anonymous CORS for image loading in safari
         (app.loader.getHandler('texture') as TextureHandler).imgParser.crossOrigin = 'anonymous';
 
+        this.origChunks = {
+            glsl: {
+                gsplatOutputVS: ShaderChunks.get(graphicsDevice, 'glsl').get('gsplatOutputVS')
+            },
+            wgsl: {
+                gsplatOutputVS: ShaderChunks.get(graphicsDevice, 'wgsl').get('gsplatOutputVS')
+            }
+        };
+
         // render skybox as plain equirect
         const glsl = ShaderChunks.get(graphicsDevice, 'glsl');
         glsl.set('skyboxPS', glsl.get('skyboxPS').replace('mapRoughnessUv(uv, mipLevel)', 'uv'));
-        glsl.set('pickPS', pickDepthGlsl);
 
         const wgsl = ShaderChunks.get(graphicsDevice, 'wgsl');
         wgsl.set('skyboxPS', wgsl.get('skyboxPS').replace('mapRoughnessUv(uv, uniform.mipLevel)', 'uv'));
-        wgsl.set('pickPS', pickDepthWgsl);
 
         // disable auto render, we'll render only when camera changes
         app.autoRender = false;
-
-        // apply camera animation settings
-        camera.camera.aspectRatio = graphicsDevice.width / graphicsDevice.height;
 
         // configure the camera
         this.configureCamera(settings);
@@ -167,27 +174,6 @@ class Viewer {
         // reconfigure camera when entering/exiting XR
         app.xr.on('start', () => this.configureCamera(settings));
         app.xr.on('end', () => this.configureCamera(settings));
-
-        // handle horizontal fov on canvas resize
-        const updateHorizontalFov = () => {
-            camera.camera.horizontalFov = graphicsDevice.width > graphicsDevice.height;
-            app.renderNextFrame = true;
-        };
-        graphicsDevice.on('resizecanvas', updateHorizontalFov);
-        updateHorizontalFov();
-
-        // handle HQ mode changes
-        const updateHqMode = () => {
-            // keep resolution under 4k on desktop and HD on mobile
-            const maxRatio = (platform.mobile ? 1920 : 3024) / Math.max(screen.width, screen.height);
-
-            // half pixel resolution with hq mode disabled
-            graphicsDevice.maxPixelRatio = (state.hqMode ? 1.0 : 0.5) * Math.min(maxRatio, window.devicePixelRatio);
-
-            app.renderNextFrame = true;
-        };
-        events.on('hqMode:changed', updateHqMode);
-        updateHqMode();
 
         // construct debug ministats
         if (config.ministats) {
@@ -253,6 +239,8 @@ class Viewer {
             cameraEntity.setEulerAngles(camera.angles);
             cameraEntity.camera.fov = camera.fov;
 
+            cameraEntity.camera.horizontalFov = graphicsDevice.width > graphicsDevice.height;
+
             // fit clipping planes to bounding box
             const boundRadius = sceneBound.halfExtents.length();
 
@@ -284,16 +272,24 @@ class Viewer {
                 // apply to the camera entity
                 applyCamera(this.cameraManager.camera);
             }
+
         });
 
-        // unpause the animation on first frame
+        // Render voxel debug overlay
+        app.on('prerender', () => {
+            this.voxelOverlay?.update();
+        });
+
+        // update state on first frame
         events.on('firstFrame', () => {
+            state.loaded = true;
             state.animationPaused = !!config.noanim;
         });
 
         // wait for the model to load
-        Promise.all([gsplatLoad, skyboxLoad]).then((results) => {
+        Promise.all([gsplatLoad, skyboxLoad, voxelLoad]).then((results) => {
             const gsplat = results[0].gsplat as GSplatComponent;
+            const collider = results[2];
 
             // get scene bounding box
             const gsplatBbox = gsplat.customAabb;
@@ -306,9 +302,28 @@ class Viewer {
             }
 
             this.inputController = new InputController(global);
+            this.inputController.collider = collider ?? null;
 
-            this.cameraManager = new CameraManager(global, sceneBound);
+            state.hasCollision = !!collider;
+
+            // Create voxel debug overlay in WebGPU only
+            if (collider && config.webgpu) {
+                this.voxelOverlay = new VoxelDebugOverlay(app, collider, camera);
+                this.voxelOverlay.mode = config.heatmap ? 'heatmap' : 'overlay';
+                state.hasVoxelOverlay = true;
+
+                events.on('voxelOverlayEnabled:changed', (value: boolean) => {
+                    this.voxelOverlay.enabled = value;
+                    app.renderNextFrame = true;
+                });
+            }
+
+            this.cameraManager = new CameraManager(global, sceneBound, collider);
             applyCamera(this.cameraManager.camera);
+
+            if (collider) {
+                this.walkCursor = new WalkCursor(app, camera, collider, events, state);
+            }
 
             const { instance } = gsplat;
             if (instance) {
@@ -340,33 +355,22 @@ class Viewer {
                 // quality ranges
                 const ranges = {
                     mobile: {
-                        low: {
-                            range: [2, 8],
-                            splatBudget: 1
-                        },
-                        high: {
-                            range: [1, 8],
-                            splatBudget: 2
-                        }
+                        low: 1,
+                        high: 2
                     },
                     desktop: {
-                        low: {
-                            range: [1, 8],
-                            splatBudget: 3
-                        },
-                        high: {
-                            range: [0, 8],
-                            splatBudget: 6
-                        }
+                        low: 2,
+                        high: 4
                     }
                 };
 
                 const quality = platform.mobile ? ranges.mobile : ranges.desktop;
 
-                // start in low quality mode so we can get user interacting asap
-                gsplat.lodRangeMin = quality.low.range[0];
-                gsplat.lodRangeMax = quality.low.range[1];
-                results[0].gsplat.splatBudget = quality.low.splatBudget * 1000000;
+                // start by streaming in low lod
+                const lodLevels = results[0].gsplat.resource?.octree?.lodLevels;
+                if (lodLevels) {
+                    gsplat.lodRangeMax = gsplat.lodRangeMin = lodLevels - 1;
+                }
 
                 // these two allow LOD behind camera to drop, saves lots of splats
                 gsplat.lodUpdateAngle = 90;
@@ -391,16 +395,18 @@ class Viewer {
 
                         // handle quality mode changes
                         const updateLod = () => {
-                            const settings = state.hqMode ? quality.high : quality.low;
-                            gsplat.lodRangeMin = settings.range[0];
-                            gsplat.lodRangeMax = settings.range[1];
-                            results[0].gsplat.splatBudget = settings.splatBudget * 1000000;
+                            const settings = state.retinaDisplay ? quality.high : quality.low;
+                            results[0].gsplat.splatBudget = settings * 1000000;
+                            gsplat.lodRangeMin = 0;
+                            gsplat.lodRangeMax = 1000;
                         };
-                        events.on('hqMode:changed', updateLod);
+                        events.on('retinaDisplay:changed', updateLod);
                         updateLod();
 
                         // debug colorize lods
                         gsplat.colorizeLod = config.colorize;
+
+                        gsplat.gpuSorting = config.gpusort;
 
                         // wait for the first valid frame to complete rendering
                         app.once('frameend', () => {
@@ -426,11 +432,14 @@ class Viewer {
     // configure camera based on application mode and post process settings
     configureCamera(settings: ExperienceSettings) {
         const { global } = this;
-        const { app, camera } = global;
+        const { app, config, camera } = global;
         const { postEffectSettings } = settings;
         const { background } = settings;
 
-        const enableCameraFrame = !app.xr.active && (anyPostEffectEnabled(postEffectSettings) || settings.highPrecisionRendering);
+        // hpr override takes precedence over settings.highPrecisionRendering
+        const highPrecisionRendering = config.hpr ?? settings.highPrecisionRendering;
+
+        const enableCameraFrame = !app.xr.active && !config.nofx && (anyPostEffectEnabled(postEffectSettings) || highPrecisionRendering);
 
         if (enableCameraFrame) {
             // create instance
@@ -441,16 +450,17 @@ class Viewer {
             const { cameraFrame } = this;
             cameraFrame.enabled = true;
             cameraFrame.rendering.toneMapping = tonemapTable[settings.tonemapping];
-            cameraFrame.rendering.renderFormats = settings.highPrecisionRendering ? [PIXELFORMAT_RGBA16F, PIXELFORMAT_RGBA32F] : [];
+            cameraFrame.rendering.renderFormats = highPrecisionRendering ? [PIXELFORMAT_RGBA16F, PIXELFORMAT_RGBA32F] : [];
             applyPostEffectSettings(cameraFrame, postEffectSettings);
             cameraFrame.update();
 
             // force gsplat shader to write gamma-space colors
-            ShaderChunks.get(app.graphicsDevice, 'glsl').set('gsplatOutputVS', gammaChunk);
+            ShaderChunks.get(app.graphicsDevice, 'glsl').set('gsplatOutputVS', gammaChunkGlsl);
+            ShaderChunks.get(app.graphicsDevice, 'wgsl').set('gsplatOutputVS', gammaChunkWgsl);
 
-            // ensure the final blit doesn't perform linear->gamma conversion
-            RenderTarget.prototype.isColorBufferSrgb = function () {
-                return true;
+            // ensure the final compose blit doesn't perform linear->gamma conversion.
+            RenderTarget.prototype.isColorBufferSrgb = function (index) {
+                return this === app.graphicsDevice.backBuffer ? true : origIsColorBufferSrgb.call(this, index);
             };
 
             camera.camera.clearColor = new Color(background.color);
@@ -460,6 +470,13 @@ class Viewer {
                 this.cameraFrame.destroy();
                 this.cameraFrame = null;
             }
+
+            // restore gsplat output shader chunks to engine defaults
+            ShaderChunks.get(app.graphicsDevice, 'glsl').set('gsplatOutputVS', this.origChunks.glsl.gsplatOutputVS);
+            ShaderChunks.get(app.graphicsDevice, 'wgsl').set('gsplatOutputVS', this.origChunks.wgsl.gsplatOutputVS);
+
+            // restore original isColorBufferSrgb behavior
+            RenderTarget.prototype.isColorBufferSrgb = origIsColorBufferSrgb;
 
             if (!app.xr.active) {
                 camera.camera.toneMapping = tonemapTable[settings.tonemapping];

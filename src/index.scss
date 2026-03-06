@@ -31,6 +31,11 @@ body {
 
 canvas {
     opacity: var(--canvas-opacity);
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
 }
 
 button {
@@ -58,6 +63,71 @@ button {
     pointer-events: auto;
 }
 
+.walkHint {
+    position: absolute;
+    top: max(60px, env(safe-area-inset-top));
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(black, 0.7);
+    color: $clr-text-light;
+    font-size: 14px;
+    padding: 10px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    pointer-events: auto;
+    white-space: nowrap;
+}
+
+/* branding link for third-party embeds */
+
+#supersplatBranding {
+    position: absolute;
+    top: max(16px, env(safe-area-inset-top));
+    left: max(16px, env(safe-area-inset-left));
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+
+    color: $clr-text-light;
+
+    > svg {
+        height: 16px;
+        width: auto;
+        flex-shrink: 0;
+        padding: 8px;
+        border-radius: 6px;
+        background-color: rgba(black, 0.3);
+
+        > g {
+            &.stroke {
+                fill: black;
+                stroke: black;
+                stroke-width: 2;
+                stroke-linejoin: round;
+                opacity: 0.4;
+            }
+
+            &.fill {
+                fill: currentColor;
+                stroke: none;
+            }
+        }
+    }
+
+    > span {
+        font-size: 14px;
+        font-weight: bold;
+        text-shadow:
+            -1px -1px 0 rgba(black, 0.4),
+             1px -1px 0 rgba(black, 0.4),
+            -1px  1px 0 rgba(black, 0.4),
+             1px  1px 0 rgba(black, 0.4);
+    }
+}
+
 /* poster */
 
 #poster {
@@ -80,7 +150,7 @@ button {
     bottom: 120px;
     left: 50%;
     transform: translate(-50%, 0);
-    width: 380px;
+    width: min(380px, calc(100vw - 32px));
 
     display: flex;
     flex-direction: column;
@@ -164,11 +234,21 @@ button {
         display: flex;
         gap: 8px;
 
+        .buttonGroup {
+            display: flex;
+            background-color: rgba(black, 0.3);
+            border-radius: 6px;
+
+            &:not(:has(> :not(.hidden))) {
+                display: none;
+            }
+        }
+
         /* controlButton */
 
         .controlButton {
-            width: 40px;
-            height: 40px;
+            width: 34px;
+            height: 34px;
             padding: 0;
             margin: 0;
             border: 0;
@@ -202,6 +282,11 @@ button {
                 }
             }
 
+            /* active highlight for simple toggle buttons (e.g. voxel overlay) */
+            &.active:not(.toggle) {
+                color: $clr-accent;
+            }
+
             /* camera toggle styling */
             &.toggle {
                 background: linear-gradient(
@@ -217,7 +302,6 @@ button {
                 transition: background-position 0.1s ease-in-out;
 
                 &.left {
-                    margin-right: -4px;
                     border-radius: 4px 0px 0px 4px;
 
                     &:not(.active) {
@@ -225,9 +309,15 @@ button {
                     }
                 }
 
+                &.middle {
+                    border-radius: 0;
+
+                    &:not(.active) {
+                        background-position: 0% 0%;
+                    }
+                }
+
                 &.right {
-                    margin-left: -4px;
-                    margin-right: 20px;
                     border-radius: 0px 4px 4px 0px;
 
                     &:not(.active) {
@@ -236,6 +326,7 @@ button {
                 }
             }
         }
+
     }
 }
 
@@ -245,8 +336,9 @@ button {
     position: fixed;
     right: max(16px, env(safe-area-inset-right));
     bottom: calc(max(16px, env(safe-area-inset-bottom)) + 70px);
-    padding: 10px;
-    border-radius: 8px;
+    padding: 12px;
+    border-radius: 16px;
+    border: 1px solid rgba(white, 0.08);
 
     display: flex;
     flex-direction: column;
@@ -256,38 +348,75 @@ button {
     font-size: 14px;
 
     color: $clr-text;
-    background-color: $clr-bkg;
+    background-color: rgba($clr-bkg, 0.8);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
 
     > .settingsRow {
         display: flex;
+        align-items: center;
+        justify-content: space-between;
         gap: 4px;
         width: 100%;
 
         > button {
             flex-grow: 1;
-            padding: 10px 20px;
-            border: 0;
+            height: 34px;
+            padding: 0 20px;
+            border: 1px solid rgba(white, 0.1);
+            border-radius: 8px;
+            font-size: 13px;
             cursor: pointer;
 
-            color: $clr-text;
-            background-color: $clr-bkg-darkest;
+            color: $clr-text-dark;
+            background-color: rgba(white, 0.04);
+            transition: background-color 250ms ease, color 250ms ease;
 
             &:hover {
                 color: $clr-text-light;
+                background-color: rgba(white, 0.1);
             }
         }
 
         > div {
-            padding: 8px;
+            height: 34px;
+            display: flex;
+            align-items: center;
+            padding: 0 8px;
             cursor: pointer;
 
             color: $clr-text-dark;
 
-            &.checkMark {
-                width: 16px;
+            &.toggleSwitch {
+                padding: 0 4px;
 
-                &:not(.active) {
-                    color: $clr-bkg;
+                .toggleTrack {
+                    width: 36px;
+                    height: 20px;
+                    border-radius: 10px;
+                    background-color: rgba(white, 0.15);
+                    position: relative;
+                    transition: background-color 200ms ease;
+
+                    .toggleThumb {
+                        width: 16px;
+                        height: 16px;
+                        border-radius: 50%;
+                        background-color: #777;
+                        position: absolute;
+                        top: 2px;
+                        left: 2px;
+                        transition: transform 200ms ease, background-color 200ms ease;
+                    }
+                }
+
+                &.active .toggleTrack {
+                    background-color: rgba($clr-accent, 0.35);
+
+                    .toggleThumb {
+                        transform: translateX(16px);
+                        background-color: $clr-accent;
+                    }
                 }
             }
 
@@ -302,7 +431,7 @@ button {
         height: 1px;
         margin: 8px 0;
 
-        background-color: $clr-text-darkest;
+        background-color: rgba(white, 0.08);
     }
 }
 
@@ -319,46 +448,51 @@ button {
 
     > #infoPanelContent {
         position: absolute;
-        top: 40px;
+        top: 50%;
         left: 50%;
-        transform: translate(-50%, 0);
+        transform: translate(-50%, -50%);
         min-height: 280px;
         min-width: 320px;
         padding: 8px;
-        border-radius: 24px;
+        border-radius: 16px;
+        border: 1px solid rgba(white, 0.08);
         display: flex;
         flex-direction: column;
 
         color: $clr-text;
         background-color: rgba($clr-bkg, 0.8);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
 
         > #tabs {
             display: flex;
-            gap: 16px;
-            padding: 8px;
-            border-radius: 22px;
+            gap: 4px;
+            padding: 4px;
+            border-radius: 12px;
 
             background-color: $clr-bkg-dark;
 
             > .tab {
-                padding: 8px;
-                border-radius: 16px;
+                padding: 8px 12px;
+                border-radius: 10px;
                 cursor: pointer;
                 flex-grow: 1;
                 text-align: center;
                 font-weight: bold;
                 font-size: 14px;
 
-                color: $clr-text;
-                transition: background-color 250ms ease;
+                color: $clr-text-dark;
+                transition: background-color 250ms ease, color 250ms ease;
             }
 
             > .tab:hover {
-                background-color: $clr-bkg-light;
+                color: $clr-text-light;
+                background-color: rgba(white, 0.06);
             }
 
             > .tab.active {
-                background-color: $clr-bkg-light;
+                color: $clr-text-light;
+                background-color: rgba(white, 0.1);
             }
         }
 
@@ -366,17 +500,23 @@ button {
             padding: 16px;
 
             h1 {
-                font-size: 14px;
+                font-size: 11px;
                 font-weight: bold;
-                padding: 0 0 6px 0;
-                color: $clr-text-light;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+                padding: 4px 0 8px 0;
+                color: $clr-accent;
             }
 
             .control-item {
                 display: flex;
                 justify-content: space-between;
+                align-items: center;
                 gap: 32px;
-                line-height: 1.5;
+                padding: 5px 8px;
+                margin: 0 -8px;
+                border-radius: 6px;
+                font-size: 13px;
 
                 > .control-action {
                     text-align: left;
@@ -384,12 +524,17 @@ button {
 
                 > .control-key {
                     text-align: right;
+                    color: $clr-text-dark;
+                    font-size: 12px;
+                }
+
+                &:nth-child(odd) {
+                    background-color: rgba(white, 0.03);
                 }
             }
 
             .control-spacer {
-                border-bottom: 1px dashed #666;
-                margin: 10px 0;
+                margin: 14px 0;
             }
         }
     }
@@ -397,24 +542,43 @@ button {
 
 #joystickBase {
     position: absolute;
-    width: 96px;
-    height: 96px;
+    width: 56px;
+    height: 100px;
     transform: translate(-50%, -50%);
-    border-radius: 50%;
+    border-radius: 28px;
     touch-action: none;
 
-    background: radial-gradient(circle at center, #0000 50%, #000f 100%);
-    background-color: #0002;
+    background: linear-gradient(180deg, #0004 0%, #0000 30%, #0000 70%, #0004 100%);
+    background-color: #0003;
+    border: 2px solid #fff3;
+
+    transition: width 0.2s ease, height 0.2s ease, border-radius 0.2s ease;
 
     > #joystick {
         position: absolute;
-        width: 48px;
-        height: 48px;
-        transform: translate(-50%, -50%);
+        left: 8px;  // (56 - 40) / 2 = 8px to center horizontally
+        width: 40px;
+        height: 40px;
         border-radius: 50%;
         touch-action: none;
 
         background-color: #fff8;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+
+        transition: left 0.1s ease;
+    }
+
+    // 2D mode: square joystick with full directional movement
+    &.mode-2d {
+        width: 100px;
+        height: 100px;
+        border-radius: 50px;
+        background: radial-gradient(circle, #0000 40%, #0004 100%);
+        background-color: #0003;
+
+        > #joystick {
+            left: 30px;  // (100 - 40) / 2 = 30px to center horizontally
+        }
     }
 }
 
@@ -436,8 +600,149 @@ button {
     width: 100%;
     height: 100%;
     pointer-events: none;
+    z-index: -1;
 }
 
 #annotations * {
     pointer-events: auto;
+}
+
+/* annotationNav */
+
+#annotationNav {
+    pointer-events: none;
+
+    &.faded-in {
+        visibility: visible;
+        opacity: 1;
+        transition: opacity 0.5s ease-out;
+    }
+
+    &.faded-out {
+        visibility: hidden;
+        opacity: 0;
+        transition: visibility 0s 0.5s, opacity 0.5s ease-out;
+    }
+
+    > button {
+        pointer-events: auto;
+        appearance: none;
+        border: 0;
+        padding: 0;
+        margin: 0;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        color: $clr-text;
+        background-color: rgba(black, 0.3);
+
+        &:hover {
+            color: $clr-text-light;
+            background-color: rgba(black, 0.5);
+        }
+
+        > svg {
+            display: block;
+
+            > g {
+                &.stroke {
+                    fill: none;
+                    stroke: black;
+                    stroke-width: 3;
+                    stroke-linecap: round;
+                    stroke-linejoin: round;
+                    opacity: 0.4;
+                }
+
+                &.fill {
+                    fill: none;
+                    stroke: currentColor;
+                    stroke-width: 2;
+                    stroke-linecap: round;
+                    stroke-linejoin: round;
+                }
+            }
+        }
+    }
+
+    // Desktop mode: horizontal bar at top center
+    &.desktop {
+        position: absolute;
+        top: max(16px, env(safe-area-inset-top));
+        left: 50%;
+        transform: translateX(-50%);
+
+        display: flex;
+        align-items: center;
+        gap: 0;
+
+        border-radius: 6px;
+        overflow: hidden;
+        background-color: rgba(black, 0.6);
+
+        > button {
+            width: 34px;
+            height: 34px;
+            background-color: transparent;
+
+            &:hover {
+                background-color: rgba(white, 0.1);
+            }
+        }
+
+        > #annotationInfo {
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 12px;
+            white-space: nowrap;
+            width: 240px;
+
+            > #annotationNavTitle {
+                font-size: 14px;
+                color: $clr-text-light;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+        }
+    }
+
+    // Touch mode: buttons at left/right screen edges
+    &.touch {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+
+        > #annotationInfo {
+            display: none;
+        }
+
+        > button {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 44px;
+            height: 80px;
+            background-color: rgba(black, 0.3);
+
+            &:active {
+                background-color: rgba(black, 0.4);
+            }
+        }
+
+        > #annotationPrev {
+            left: max(0px, env(safe-area-inset-left));
+            border-radius: 0 6px 6px 0;
+        }
+
+        > #annotationNext {
+            right: max(0px, env(safe-area-inset-right));
+            border-radius: 6px 0 0 6px;
+        }
+    }
 }
