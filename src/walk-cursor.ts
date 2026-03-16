@@ -10,9 +10,10 @@ import type { VoxelCollider } from './voxel-collider';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 const NUM_SAMPLES = 12;
-const CIRCLE_OUTER_RADIUS = 0.3;
-const CIRCLE_INNER_RADIUS = 0.22;
+const CIRCLE_OUTER_RADIUS = 0.2;
+const CIRCLE_INNER_RADIUS = 0.17;
 const BEZIER_K = 1 / 6;
+const NORMAL_SMOOTH_FACTOR = 0.25;
 
 const tmpV = new Vec3();
 const tmpScreen = new Vec3();
@@ -61,6 +62,14 @@ class WalkCursor {
     private targetPos: Vec3 | null = null;
 
     private targetNormal: Vec3 | null = null;
+
+    private smoothNx = 0;
+
+    private smoothNy = 1;
+
+    private smoothNz = 0;
+
+    private hasSmoothedNormal = false;
 
     private onPointerMove: (e: PointerEvent) => void;
 
@@ -116,6 +125,7 @@ class WalkCursor {
             if (e.pointerType === 'touch') return;
             if (e.buttons) {
                 this.cursorPath.style.display = 'none';
+                this.hasSmoothedNormal = false;
                 return;
             }
             this.updateCursor(e.offsetX, e.offsetY);
@@ -123,6 +133,7 @@ class WalkCursor {
 
         this.onPointerLeave = () => {
             this.cursorPath.style.display = 'none';
+            this.hasSmoothedNormal = false;
         };
 
         this.canvas.addEventListener('pointermove', this.onPointerMove);
@@ -142,6 +153,7 @@ class WalkCursor {
         events.on('walkTo', () => {
             this.walking = true;
             this.cursorPath.style.display = 'none';
+            this.hasSmoothedNormal = false;
         });
 
         events.on('walkCancel', () => {
@@ -216,6 +228,7 @@ class WalkCursor {
     private updateCursor(offsetX: number, offsetY: number) {
         if (!this.active || this.walking) {
             this.cursorPath.style.display = 'none';
+            this.hasSmoothedNormal = false;
             return;
         }
 
@@ -233,6 +246,7 @@ class WalkCursor {
 
         if (!hit) {
             this.cursorPath.style.display = 'none';
+            this.hasSmoothedNormal = false;
             return;
         }
 
@@ -240,10 +254,32 @@ class WalkCursor {
         const py = -hit.y;
         const pz = hit.z;
 
-        const sn = collider.querySurfaceNormal(hit.x, hit.y, hit.z);
-        const nx = -sn.nx;
-        const ny = -sn.ny;
-        const nz = sn.nz;
+        const rdx = -tmpV.x;
+        const rdy = -tmpV.y;
+        const rdz = tmpV.z;
+        const sn = collider.querySurfaceNormal(hit.x, hit.y, hit.z, rdx, rdy, rdz);
+        let nx = -sn.nx;
+        let ny = -sn.ny;
+        let nz = sn.nz;
+
+        if (this.hasSmoothedNormal) {
+            const t = NORMAL_SMOOTH_FACTOR;
+            nx = this.smoothNx + (nx - this.smoothNx) * t;
+            ny = this.smoothNy + (ny - this.smoothNy) * t;
+            nz = this.smoothNz + (nz - this.smoothNz) * t;
+            const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+            if (len > 1e-6) {
+                const invLen = 1.0 / len;
+                nx *= invLen;
+                ny *= invLen;
+                nz *= invLen;
+            }
+        }
+
+        this.smoothNx = nx;
+        this.smoothNy = ny;
+        this.smoothNz = nz;
+        this.hasSmoothedNormal = true;
 
         this.projectCircle(px, py, pz, nx, ny, nz, CIRCLE_OUTER_RADIUS, this.outerX, this.outerY);
         this.projectCircle(px, py, pz, nx, ny, nz, CIRCLE_INNER_RADIUS, this.innerX, this.innerY);

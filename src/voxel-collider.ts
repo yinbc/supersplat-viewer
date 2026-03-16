@@ -42,17 +42,78 @@ const SOLID_LEAF_MARKER = 0xFF000000 >>> 0;
 /** Minimum penetration depth to report a collision (avoids floating-point noise at corners) */
 const PENETRATION_EPSILON = 1e-4;
 
-/** Precomputed offsets and inverse-length weights for querySurfaceNormal's 7x7x7 neighborhood. */
-const NORMAL_R = 3;
-const normalOffsets: { dx: number; dy: number; dz: number; wx: number; wy: number; wz: number }[] = [];
-for (let dz = -NORMAL_R; dz <= NORMAL_R; dz++) {
-    for (let dy = -NORMAL_R; dy <= NORMAL_R; dy++) {
-        for (let dx = -NORMAL_R; dx <= NORMAL_R; dx++) {
-            if (dx === 0 && dy === 0 && dz === 0) continue;
-            const invLen = 1.0 / Math.sqrt(dx * dx + dy * dy + dz * dz);
-            normalOffsets.push({ dx, dy, dz, wx: dx * invLen, wy: dy * invLen, wz: dz * invLen });
+/** Half-extent of the flatness sampling patch (5x5 when R=2). */
+const FLAT_R = 2;
+
+/** 1/sqrt(2), used to normalise 45-degree diagonal normals. */
+const INV_SQRT2 = 1 / Math.sqrt(2);
+
+/**
+ * Surface normal candidate directions for querySurfaceNormal.
+ * Each entry: [dx, dy, dz, t1x, t1y, t1z, t2x, t2y, t2z]
+ *   (dx,dy,dz) = canonical normal direction (components 0 or +/-1)
+ *   (t1,t2) = orthogonal tangent vectors spanning the perpendicular sampling plane
+ */
+const SURFACE_CANDIDATES: number[][] = [
+    // Axis-aligned
+    [1, 0, 0, 0, 1, 0, 0, 0, 1],
+    [0, 1, 0, 1, 0, 0, 0, 0, 1],
+    [0, 0, 1, 1, 0, 0, 0, 1, 0],
+    // XZ diagonals (vertical walls at 45 degrees)
+    [1, 0, 1, 0, 1, 0, -1, 0, 1],
+    [1, 0, -1, 0, 1, 0, 1, 0, 1],
+    // XY diagonals (walls tilted from vertical)
+    [1, 1, 0, 0, 0, 1, -1, 1, 0],
+    [1, -1, 0, 0, 0, 1, 1, 1, 0],
+    // YZ diagonals (sloped floors/ceilings)
+    [0, 1, 1, 1, 0, 0, 0, -1, 1],
+    [0, 1, -1, 1, 0, 0, 0, 1, 1]
+];
+
+/**
+ * Score a surface candidate direction by sampling a 5x5 patch at three depth layers
+ * shifted along the step direction. Returns the best (maximum) layer score. A "surface
+ * hit" at each sample is a solid voxel whose neighbour in the step direction is empty.
+ *
+ * @param collider - The voxel collider instance.
+ * @param ix - Voxel X index of the surface point.
+ * @param iy - Voxel Y index of the surface point.
+ * @param iz - Voxel Z index of the surface point.
+ * @param sx - Step X component (camera-facing direction).
+ * @param sy - Step Y component.
+ * @param sz - Step Z component.
+ * @param t1x - First tangent vector X.
+ * @param t1y - First tangent vector Y.
+ * @param t1z - First tangent vector Z.
+ * @param t2x - Second tangent vector X.
+ * @param t2y - Second tangent vector Y.
+ * @param t2z - Second tangent vector Z.
+ * @returns The best score across the three depth layers.
+ */
+function scoreSurfaceCandidate(
+    collider: VoxelCollider,
+    ix: number, iy: number, iz: number,
+    sx: number, sy: number, sz: number,
+    t1x: number, t1y: number, t1z: number,
+    t2x: number, t2y: number, t2z: number
+): number {
+    let best = 0;
+    for (let depth = 1; depth >= -1; depth--) {
+        let s = 0;
+        for (let da = -FLAT_R; da <= FLAT_R; da++) {
+            for (let db = -FLAT_R; db <= FLAT_R; db++) {
+                const px = ix + da * t1x + db * t2x - sx * depth;
+                const py = iy + da * t1y + db * t2y - sy * depth;
+                const pz = iz + da * t1z + db * t2z - sz * depth;
+                if (collider.isVoxelSolid(px, py, pz) &&
+                    !collider.isVoxelSolid(px + sx, py + sy, pz + sz)) {
+                    s++;
+                }
+            }
         }
+        if (s > best) best = s;
     }
+    return best;
 }
 
 /**
@@ -281,51 +342,75 @@ class VoxelCollider {
     }
 
     /**
-     * Compute a smoothed surface normal at a world-space position by sampling the surrounding
-     * voxel neighborhood. Uses a gradient-of-occupancy approach: for each solid voxel in the
-     * neighborhood, its offset is subtracted from the accumulated normal (pointing away from
-     * the solid mass). This produces stable normals — floors consistently point upward even
-     * on uneven surfaces, and walls produce horizontal normals.
+     * Compute a stable surface normal at a world-space position using flatness-probability
+     * sampling. Tests 9 candidate directions: 3 axis-aligned and 6 diagonal (45-degree in
+     * each pair of axes). For each camera-facing candidate a 5x5 patch of voxels in the
+     * perpendicular plane is sampled: a voxel counts as a "surface hit" if it is solid and
+     * the adjacent voxel toward the camera is empty. The candidate with the highest hit
+     * count is the surface orientation.
      *
      * @param x - World X coordinate of the surface point.
      * @param y - World Y coordinate of the surface point.
      * @param z - World Z coordinate of the surface point.
-     * @returns Object with nx, ny, nz components of the normalized surface normal.
+     * @param rdx - Ray direction X (toward the surface, in voxel space).
+     * @param rdy - Ray direction Y.
+     * @param rdz - Ray direction Z.
+     * @returns Object with nx, ny, nz components of the surface normal.
      */
-    querySurfaceNormal(x: number, y: number, z: number): { nx: number; ny: number; nz: number } {
-        const ix = Math.floor((x - this._gridMinX) / this._voxelResolution);
-        const iy = Math.floor((y - this._gridMinY) / this._voxelResolution);
-        const iz = Math.floor((z - this._gridMinZ) / this._voxelResolution);
+    querySurfaceNormal(
+        x: number, y: number, z: number,
+        rdx: number, rdy: number, rdz: number
+    ): { nx: number; ny: number; nz: number } {
+        // Nudge the query point slightly along the ray direction so that a hit point
+        // sitting exactly on a voxel face boundary resolves to the solid voxel rather
+        // than the adjacent empty one. Uses Math.sign so the nudge is independent of
+        // ray vector magnitude.
+        const nudge = this._voxelResolution * 0.25;
+        const ix = Math.floor((x + Math.sign(rdx) * nudge - this._gridMinX) / this._voxelResolution);
+        const iy = Math.floor((y + Math.sign(rdy) * nudge - this._gridMinY) / this._voxelResolution);
+        const iz = Math.floor((z + Math.sign(rdz) * nudge - this._gridMinZ) / this._voxelResolution);
 
-        let nx = 0;
-        let ny = 0;
-        let nz = 0;
+        const result = this._normalResult;
 
-        for (let i = 0; i < normalOffsets.length; i++) {
-            const o = normalOffsets[i];
-            if (this.isVoxelSolid(ix + o.dx, iy + o.dy, iz + o.dz)) {
-                nx -= o.wx;
-                ny -= o.wy;
-                nz -= o.wz;
+        let bestScore = -1;
+        let bestNx = 0;
+        let bestNy = 1;
+        let bestNz = 0;
+
+        for (let c = 0; c < SURFACE_CANDIDATES.length; c++) {
+            const cand = SURFACE_CANDIDATES[c];
+            const dx = cand[0];
+            const dy = cand[1];
+            const dz = cand[2];
+
+            const dot = rdx * dx + rdy * dy + rdz * dz;
+            if (Math.abs(dot) < 1e-6) continue;
+
+            const sign = dot < 0 ? 1 : -1;
+            const sx = dx * sign;
+            const sy = dy * sign;
+            const sz = dz * sign;
+
+            const score = scoreSurfaceCandidate(
+                this,
+                ix, iy, iz,
+                sx, sy, sz,
+                cand[3], cand[4], cand[5],
+                cand[6], cand[7], cand[8]
+            );
+
+            if (score > bestScore) {
+                bestScore = score;
+                const mag = (Math.abs(dx) + Math.abs(dy) + Math.abs(dz)) > 1 ? INV_SQRT2 : 1;
+                bestNx = sx * mag;
+                bestNy = sy * mag;
+                bestNz = sz * mag;
             }
         }
 
-        const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
-        if (len > 1e-6) {
-            const invLen = 1.0 / len;
-            nx *= invLen;
-            ny *= invLen;
-            nz *= invLen;
-        } else {
-            nx = 0;
-            ny = 1;
-            nz = 0;
-        }
-
-        const result = this._normalResult;
-        result.nx = nx;
-        result.ny = ny;
-        result.nz = nz;
+        result.nx = bestNx;
+        result.ny = bestNy;
+        result.nz = bestNz;
         return result;
     }
 
@@ -969,7 +1054,7 @@ class VoxelCollider {
      * @param iz - Global voxel Z index.
      * @returns True if the voxel is solid.
      */
-    private isVoxelSolid(ix: number, iy: number, iz: number): boolean {
+    isVoxelSolid(ix: number, iy: number, iz: number): boolean {
         if (this.nodes.length === 0 ||
             ix < 0 || iy < 0 || iz < 0 ||
             ix >= this.numVoxelsX || iy >= this.numVoxelsY || iz >= this.numVoxelsZ) {

@@ -42,11 +42,14 @@ class CameraManager {
     camera = new Camera();
 
     constructor(global: Global, bbox: BoundingBox, collider: VoxelCollider | null = null) {
-        const { events, settings, state } = global;
+        const { config, events, settings, state } = global;
 
-        const camera0 = settings.cameras[0].initial;
-        const frameCamera = createFrameCamera(bbox, camera0.fov);
-        const resetCamera = createCamera(new Vec3(camera0.position), new Vec3(camera0.target), camera0.fov);
+        const camera0 = settings.cameras[0]?.initial;
+        const defaultFov = camera0?.fov ?? 75;
+        const frameCamera = createFrameCamera(bbox, defaultFov);
+        const resetCamera = camera0 ?
+            createCamera(new Vec3(camera0.position), new Vec3(camera0.target), camera0.fov) :
+            frameCamera;
 
         const getAnimTrack = (initial: Camera, isObjectExperience: boolean) => {
             const { animTracks } = settings;
@@ -65,7 +68,7 @@ class CameraManager {
 
         // object experience starts outside the bounding box
         const isObjectExperience = !bbox.containsPoint(resetCamera.position);
-        const animTrack = getAnimTrack(settings.hasStartPose ? resetCamera : frameCamera, isObjectExperience);
+        const animTrack = getAnimTrack(resetCamera, isObjectExperience);
 
         const controllers = {
             orbit: new OrbitController(),
@@ -74,6 +77,8 @@ class CameraManager {
             anim: animTrack ? new AnimController(animTrack) : null
         };
 
+        controllers.orbit.fov = resetCamera.fov;
+        controllers.fly.fov = resetCamera.fov;
         controllers.fly.collider = collider;
         controllers.walk.collider = collider;
 
@@ -91,15 +96,16 @@ class CameraManager {
         state.animationDuration = controllers.anim ? controllers.anim.animState.cursor.duration : 0;
 
         // initialize camera mode and initial camera position
-        state.cameraMode = state.hasAnimation ? 'anim' : (isObjectExperience ? 'orbit' : 'fly');
+        state.cameraMode = (state.hasAnimation && !config.noanim) ? 'anim' : (isObjectExperience ? 'orbit' : (collider ? 'walk' : 'fly'));
         this.camera.copy(resetCamera);
 
         const target = new Camera(this.camera);             // the active controller updates this
         const from = new Camera(this.camera);               // stores the previous camera state during transition
-        let fromMode: CameraMode = isObjectExperience ? 'orbit' : 'fly';
+        const defaultMode: CameraMode = isObjectExperience ? 'orbit' : (collider ? 'walk' : 'fly');
+        let fromMode: CameraMode = defaultMode;
 
-        // tracks the mode to restore when exiting FPS
-        let preWalkMode: CameraMode = 'fly';
+        // tracks the mode to restore when exiting walk
+        let preWalkMode: CameraMode = isObjectExperience ? 'orbit' : 'fly';
 
         // enter the initial controller
         getController(state.cameraMode).onEnter(this.camera);
@@ -255,7 +261,6 @@ class CameraManager {
             );
 
             controllers.orbit.goto(tmpCamera);
-            target.fov = tmpCamera.fov;
             startTransition();
         });
 

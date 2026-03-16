@@ -229,11 +229,6 @@ class InputController {
             this._lastPointerOffsetX = event.offsetX;
             this._lastPointerOffsetY = event.offsetY;
 
-            // Cancel any active auto-walk in click-to-walk mode
-            if (state.cameraMode === 'walk' && !state.gamingControls) {
-                events.fire('walkCancel');
-            }
-
             // Start desktop click-to-walk tracking
             if (event.pointerType !== 'touch' && event.button === 0) {
                 this._mouseClickTracking = true;
@@ -258,7 +253,13 @@ class InputController {
         // Desktop click-to-walk: accumulate displacement during mouse drag
         canvas.addEventListener('pointermove', (event) => {
             if (this._mouseClickTracking && event.pointerType !== 'touch') {
+                const prev = this._mouseClickDelta;
                 this._mouseClickDelta += Math.abs(event.movementX) + Math.abs(event.movementY);
+                if (prev < TAP_EPSILON && this._mouseClickDelta >= TAP_EPSILON) {
+                    if (state.cameraMode === 'walk' && !state.gamingControls) {
+                        events.fire('walkCancel');
+                    }
+                }
             }
         });
 
@@ -336,8 +337,9 @@ class InputController {
                     case 'h':
                         events.fire('inputEvent', 'toggleHelp');
                         break;
-                    case 'w': case 'a': case 's': case 'd':
-                        if (state.cameraMode === 'walk' && state.inputMode === 'desktop' && !state.gamingControls) {
+                    default:
+                        if ((event.code === 'KeyW' || event.code === 'KeyA' || event.code === 'KeyS' || event.code === 'KeyD') &&
+                            state.cameraMode === 'walk' && state.inputMode === 'desktop' && !state.gamingControls) {
                             state.gamingControls = true;
                         }
                         break;
@@ -436,7 +438,10 @@ class InputController {
 
         if (!hit) return null;
 
-        const sn = this.collider.querySurfaceNormal(hit.x, hit.y, hit.z);
+        const rdx = -tmpV1.x;
+        const rdy = -tmpV1.y;
+        const rdz = tmpV1.z;
+        const sn = this.collider.querySurfaceNormal(hit.x, hit.y, hit.z, rdx, rdy, rdz);
         return {
             position: new Vec3(-hit.x, -hit.y, hit.z),
             normal: new Vec3(-sn.nx, -sn.ny, sn.nz)
@@ -492,7 +497,13 @@ class InputController {
 
             // Accumulate movement while touch is active
             if (this._tapTouches > 0) {
+                const prevDelta = this._tapDelta;
                 this._tapDelta += Math.abs(touch[0]) + Math.abs(touch[1]);
+                if (prevDelta < TAP_EPSILON && this._tapDelta >= TAP_EPSILON) {
+                    if (!state.gamingControls) {
+                        events.fire('walkCancel');
+                    }
+                }
             }
 
             // Touch just ended (1+ → 0): check if it was a tap
