@@ -78,7 +78,12 @@ type ExperienceSettings = {
     cameras: Camera[],
     annotations: Annotation[],
 
-    startMode: 'default' | 'animTrack' | 'annotation'
+    startMode: 'default' | 'animTrack' | 'annotation',
+
+    elevationRange?: {
+        min: number,
+        max: number
+    }
 };
 
 export type { AnimTrack, Camera, Annotation, PostEffectSettings, ExperienceSettings };

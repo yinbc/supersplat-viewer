@@ -35,6 +35,16 @@ class WalkController implements CameraController {
     collider: VoxelCollider | null = null;
 
     /**
+     * Minimum pitch angle in degrees (looking down limit).
+     */
+    pitchMin = -90;
+
+    /**
+     * Maximum pitch angle in degrees (looking up limit).
+     */
+    pitchMax = 90;
+
+    /**
      * Field of view in degrees for walk mode.
      */
     fov = 96;
@@ -152,7 +162,7 @@ class WalkController implements CameraController {
 
         // apply rotation at display rate for responsive mouse look
         this._angles.add(v.set(-rotate[1], -rotate[0], 0));
-        this._angles.x = math.clamp(this._angles.x, -90, 90);
+        this._angles.x = math.clamp(this._angles.x, this.pitchMin, this.pitchMax);
 
         // accumulate movement input so frames without a physics step don't lose input
         this._pendingMove[0] += move[0];
