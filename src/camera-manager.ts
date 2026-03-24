@@ -70,9 +70,12 @@ class CameraManager {
         const isObjectExperience = !bbox.containsPoint(resetCamera.position);
         const animTrack = getAnimTrack(resetCamera, isObjectExperience);
 
+        const pitchMin = settings.elevationRange?.min ?? -90;
+        const pitchMax = settings.elevationRange?.max ?? 90;
+
         const controllers = {
-            orbit: new OrbitController(),
-            fly: new FlyController(),
+            orbit: new OrbitController(pitchMin, pitchMax),
+            fly: new FlyController(pitchMin, pitchMax),
             walk: new WalkController(),
             anim: animTrack ? new AnimController(animTrack) : null
         };
@@ -81,6 +84,8 @@ class CameraManager {
         controllers.fly.fov = resetCamera.fov;
         controllers.fly.collider = collider;
         controllers.walk.collider = collider;
+        controllers.walk.pitchMin = pitchMin;
+        controllers.walk.pitchMax = pitchMax;
 
         const walkSource = new WalkSource();
         walkSource.onComplete = () => {
