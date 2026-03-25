@@ -27,13 +27,39 @@ import {
 import { Annotations } from './annotations';
 import { CameraManager } from './camera-manager';
 import { Camera } from './cameras/camera';
-import { nearlyEquals } from './core/math';
+import { easeOut, nearlyEquals } from './core/math';
 import { InputController } from './input-controller';
 import type { ExperienceSettings, PostEffectSettings } from './settings';
 import type { Global } from './types';
 import type { VoxelCollider } from './voxel-collider';
 import { VoxelDebugOverlay } from './voxel-debug-overlay';
 import { WalkCursor } from './walk-cursor';
+
+// Shader chunk overrides for the gaussian transition effect.
+// splatTransition uniform controls the scale (0 = point cloud, 1 = full gaussian).
+const gsplatModifyGlsl = `
+uniform float splatTransition;
+void modifySplatCenter(inout vec3 center) {
+}
+void modifySplatRotationScale(vec3 originalCenter, vec3 modifiedCenter, inout vec4 rotation, inout vec3 scale) {
+    scale *= mix(0.01, 1.0, splatTransition);
+}
+void modifySplatColor(vec3 center, inout vec4 color) {
+    color.a *= smoothstep(0.0, 0.3, splatTransition);
+}
+`;
+
+const gsplatModifyWgsl = `
+uniform splatTransition: f32;
+fn modifySplatCenter(center: ptr<function, vec3f>) {
+}
+fn modifySplatRotationScale(originalCenter: vec3f, modifiedCenter: vec3f, rotation: ptr<function, vec4f>, scale: ptr<function, vec3f>) {
+    *scale *= mix(0.01, 1.0, uniform.splatTransition);
+}
+fn modifySplatColor(center: vec3f, color: ptr<function, vec4f>) {
+    (*color).a *= smoothstep(0.0, 0.3, uniform.splatTransition);
+}
+`;
 
 const gammaChunkGlsl = `
 vec3 prepareOutputFromGamma(vec3 gammaColor) {
@@ -134,13 +160,21 @@ class Viewer {
     origChunks: {
         glsl: {
             gsplatOutputVS: string,
+            gsplatModifyVS: string,
             skyboxPS: string
         },
         wgsl: {
             gsplatOutputVS: string,
+            gsplatModifyVS: string,
             skyboxPS: string
         }
     };
+
+    transitionTime = -1;
+
+    transitionDuration = 1.5;
+
+    gsplatEntity: Entity | null = null;
 
     constructor(global: Global, gsplatLoad: Promise<Entity>, skyboxLoad: Promise<void> | undefined, voxelLoad: Promise<VoxelCollider> | undefined) {
         this.global = global;
@@ -161,13 +195,19 @@ class Viewer {
         this.origChunks = {
             glsl: {
                 gsplatOutputVS: glsl.get('gsplatOutputVS'),
+                gsplatModifyVS: glsl.get('gsplatModifyVS'),
                 skyboxPS: glsl.get('skyboxPS')
             },
             wgsl: {
                 gsplatOutputVS: wgsl.get('gsplatOutputVS'),
+                gsplatModifyVS: wgsl.get('gsplatModifyVS'),
                 skyboxPS: wgsl.get('skyboxPS')
             }
         };
+
+        // override gsplatModifyVS with transition-aware version
+        glsl.set('gsplatModifyVS', gsplatModifyGlsl);
+        wgsl.set('gsplatModifyVS', gsplatModifyWgsl);
 
         // disable auto render, we'll render only when camera changes
         app.autoRender = false;
@@ -277,6 +317,16 @@ class Viewer {
                 applyCamera(this.cameraManager.camera);
             }
 
+            // animate the gaussian transition effect
+            if (this.transitionTime >= 0 && this.transitionTime < this.transitionDuration) {
+                this.transitionTime = Math.min(this.transitionTime + deltaTime, this.transitionDuration);
+                const t = easeOut(this.transitionTime / this.transitionDuration);
+                const material = this.gsplatEntity?.gsplat?.unified
+                    ? app.scene.gsplat.material
+                    : this.gsplatEntity?.gsplat?.material;
+                material?.setParameter('splatTransition', t);
+                app.renderNextFrame = true;
+            }
         });
 
         // Render voxel debug overlay
@@ -284,14 +334,16 @@ class Viewer {
             this.voxelOverlay?.update();
         });
 
-        // update state on first frame
+        // update state on first frame and start the gaussian transition
         events.on('firstFrame', () => {
             state.loaded = true;
             state.animationPaused = !!config.noanim;
+            this.transitionTime = 0;
         });
 
         // wait for the model to load
         Promise.all([gsplatLoad, skyboxLoad, voxelLoad]).then((results) => {
+            this.gsplatEntity = results[0];
             const gsplat = results[0].gsplat as GSplatComponent;
             const collider = results[2];
 

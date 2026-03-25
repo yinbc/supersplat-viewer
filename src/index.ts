@@ -42,6 +42,7 @@ const loadGsplat = async (app: AppBase, config: Config, progressCallback: (progr
             const material = entity.gsplat.unified ? app.scene.gsplat.material : entity.gsplat.material;
             material.setDefine('GSPLAT_AA', aa);
             material.setParameter('alphaClip', 1 / 255);
+            material.setParameter('splatTransition', 0);
             app.root.addChild(entity);
             resolve(entity);
         });
